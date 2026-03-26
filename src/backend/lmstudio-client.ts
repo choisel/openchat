@@ -64,23 +64,27 @@ export function createLmStudioClient(baseUrl: string): LmStudioClient {
       const decoder = new TextDecoder()
       let usage: { prompt_tokens: number; completion_tokens: number } | undefined
 
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
 
-        const chunk = decoder.decode(value, { stream: true })
-        for (const line of chunk.split('\n')) {
-          const trimmed = line.replace(/^data: /, '').trim()
-          if (!trimmed || trimmed === '[DONE]') continue
-          try {
-            const parsed = JSON.parse(trimmed)
-            const token = parsed.choices?.[0]?.delta?.content
-            if (token) onToken(token)
-            if (parsed.usage) usage = parsed.usage
-          } catch {
-            // malformed SSE line — skip
+          const chunk = decoder.decode(value, { stream: true })
+          for (const line of chunk.split('\n')) {
+            const trimmed = line.replace(/^data: /, '').trim()
+            if (!trimmed || trimmed === '[DONE]') continue
+            try {
+              const parsed = JSON.parse(trimmed)
+              const token = parsed.choices?.[0]?.delta?.content
+              if (token) onToken(token)
+              if (parsed.usage) usage = parsed.usage
+            } catch {
+              // malformed SSE line — skip
+            }
           }
         }
+      } finally {
+        reader.cancel()
       }
 
       return { usage }
