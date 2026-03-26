@@ -1,5 +1,6 @@
 {
   "name": "openchat",
+  "private": true,
   "version": "0.1.0",
   "description": "Local LLM chat interface",
   "main": "out/main/index.js",
@@ -30,7 +31,6 @@
   "dependencies": {
     "better-sqlite3": "^12.8.0",
     "express": "^5.2.1",
-    "node-fetch": "^3.3.2",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
   }
