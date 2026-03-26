@@ -24,7 +24,7 @@ export interface Db {
   getConversation: (id: number) => Conversation | undefined
   listConversations: () => Conversation[]
   deleteConversation: (id: number) => void
-  addMessage: (args: { conversationId: number; role: string; content: string; tokens: number }) => number
+  addMessage: (args: { conversationId: number; role: 'user' | 'assistant'; content: string; tokens: number }) => number
   getMessages: (conversationId: number) => Message[]
 }
 
@@ -48,9 +48,8 @@ export function createDb(dbPath: string): Db {
       tokens INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now'))
     );
-
-    PRAGMA foreign_keys = ON;
   `)
+  db.pragma('foreign_keys = ON')
 
   return {
     close: () => db.close(),
