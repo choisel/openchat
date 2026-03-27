@@ -35,6 +35,7 @@ export interface Message {
   role: 'user' | 'assistant'
   content: string
   tokens: number
+  exact_tokens?: number | null
   created_at: string
 }
 
@@ -110,6 +111,16 @@ export const api = {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(fields)
+    })
+    return res.json()
+  },
+
+  async promoteSession(payload: { name: string; model: string; messages: Array<{ role: 'user' | 'assistant'; content: string; tokens: number }> }): Promise<Conversation> {
+    const base = await getBaseUrl()
+    const res = await fetch(`${base}/api/conversations/promote`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
     })
     return res.json()
   },

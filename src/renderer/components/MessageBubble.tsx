@@ -2,11 +2,13 @@ interface Props {
   role: 'user' | 'assistant'
   content: string
   tokens: number
+  exact_tokens?: number | null
   modelName?: string
   isStreaming?: boolean
 }
 
-export function MessageBubble({ role, content, tokens, modelName, isStreaming }: Props) {
+export function MessageBubble({ role, content, tokens, exact_tokens, modelName, isStreaming }: Props) {
+  const displayTokens = exact_tokens ?? tokens
   const isUser = role === 'user'
 
   return (
@@ -20,7 +22,7 @@ export function MessageBubble({ role, content, tokens, modelName, isStreaming }:
           {isStreaming && <span className="streaming-cursor">▋</span>}
         </span>
       </div>
-      <span style={styles.tokenAnnotation}>{tokens} tokens</span>
+      <span style={styles.tokenAnnotation}>{displayTokens} tokens</span>
     </div>
   )
 }

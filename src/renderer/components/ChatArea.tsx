@@ -186,15 +186,23 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
         onNameChange={handleNameChange}
       />
       <div style={styles.messages}>
-        {messages.map(msg => (
-          <MessageBubble
-            key={msg.id}
-            role={msg.role}
-            content={msg.id === streamingAssistantId ? streamingContent || msg.content : msg.content}
-            tokens={msg.id === streamingAssistantId ? usedTokens - streamingBaseTokens : msg.tokens}
-            isStreaming={isStreaming && msg.id === streamingAssistantId}
-          />
-        ))}
+        {messages.map(msg => {
+          const isStreamingMsg = isStreaming && msg.id === streamingAssistantId
+          const displayContent = msg.id === streamingAssistantId ? streamingContent || msg.content : msg.content
+          const displayTokens = isStreamingMsg
+            ? Math.ceil(streamingContent.length / 4)
+            : msg.tokens
+          return (
+            <MessageBubble
+              key={msg.id}
+              role={msg.role}
+              content={displayContent}
+              tokens={displayTokens}
+              exact_tokens={isStreamingMsg ? undefined : msg.exact_tokens}
+              isStreaming={isStreamingMsg}
+            />
+          )
+        })}
         <div ref={messagesEndRef} />
       </div>
       <div style={styles.inputArea}>
