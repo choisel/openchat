@@ -30,6 +30,7 @@ export interface Db {
   updateConversation: (id: number, fields: Partial<{ name: string; model: string; context_window: number; auto_compact_threshold: number; auto_compact_enabled: number }>) => void
   deleteConversation: (id: number) => void
   addMessage: (args: { conversationId: number; role: 'user' | 'assistant'; content: string; tokens: number }) => number
+  bulkAddMessages: (conversationId: number, messages: Array<{ role: 'user' | 'assistant'; content: string; tokens: number }>) => void
   getMessages: (conversationId: number) => Message[]
   updateMessageTokens: (id: number, exact: number) => void
   addCompactedMarker: (conversationId: number, summaryMessageCount: number) => void
@@ -117,6 +118,21 @@ export function createDb(dbPath: string): Db {
         "UPDATE conversations SET updated_at = strftime('%Y-%m-%dT%H:%M:%f', 'now') WHERE id = ?"
       ).run(conversationId)
       return result.lastInsertRowid as number
+    },
+
+    bulkAddMessages(conversationId, messages) {
+      const insertMsg = db.prepare(
+        'INSERT INTO messages (conversation_id, role, content, tokens) VALUES (?, ?, ?, ?)'
+      )
+      const bulk = db.transaction((msgs: Array<{ role: 'user' | 'assistant'; content: string; tokens: number }>) => {
+        for (const m of msgs) {
+          insertMsg.run(conversationId, m.role, m.content, m.tokens)
+        }
+        db.prepare(
+          "UPDATE conversations SET updated_at = strftime('%Y-%m-%dT%H:%M:%f', 'now') WHERE id = ?"
+        ).run(conversationId)
+      })
+      bulk(messages)
     },
 
     getMessages(conversationId) {

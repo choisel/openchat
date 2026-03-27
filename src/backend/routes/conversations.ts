@@ -28,9 +28,9 @@ export function createConversationsRouter(db: Db, lmClient: LmStudioClient): Rou
   router.post('/promote', (req, res) => {
     const { name = 'New conversation', model = 'auto', messages = [] } = req.body
     const id = db.createConversation({ name, model })
-    for (const msg of messages as Array<{ role: 'user' | 'assistant'; content: string; tokens: number }>) {
-      db.addMessage({ conversationId: id, role: msg.role, content: msg.content, tokens: msg.tokens ?? 0 })
-    }
+    const msgs = (messages as Array<{ role: 'user' | 'assistant'; content: string; tokens: number }>)
+      .map(m => ({ role: m.role, content: m.content, tokens: m.tokens ?? 0 }))
+    db.bulkAddMessages(id, msgs)
     const conversation = db.getConversation(id)
     res.status(201).json(conversation)
   })

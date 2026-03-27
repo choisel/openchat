@@ -151,6 +151,14 @@ describe('conversations API', () => {
     expect(forkedMessages[1].content).toBe('Hi')
   })
 
+  it('POST /api/conversations/:id/fork returns 404 for unknown conversation', async () => {
+    const res = await request(app)
+      .post('/api/conversations/9999/fork')
+      .send({ fromMessageId: 1 })
+    expect(res.status).toBe(404)
+    expect(res.body.error).toBeDefined()
+  })
+
   it('POST /api/conversations/promote creates a persistent conversation with messages', async () => {
     const res = await request(app)
       .post('/api/conversations/promote')
