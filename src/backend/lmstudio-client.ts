@@ -14,6 +14,11 @@ export interface LmStudioClient {
     onToken: (token: string) => void
     signal?: AbortSignal
   }) => Promise<{ usage?: { prompt_tokens: number; completion_tokens: number } }>
+  summarize: (
+    messages: { role: string; content: string }[],
+    model: string,
+    signal: AbortSignal
+  ) => Promise<string>
 }
 
 export function createLmStudioClient(baseUrl: string): LmStudioClient {
@@ -43,6 +48,33 @@ export function createLmStudioClient(baseUrl: string): LmStudioClient {
       } catch {
         return { connected: false }
       }
+    },
+
+    async summarize(messages, model, signal) {
+      const prompt = [
+        ...messages,
+        {
+          role: 'system',
+          content:
+            'Provide a concise summary of the conversation above, preserving all key information and decisions.'
+        }
+      ]
+      let response: Response
+      try {
+        response = await fetch(`${baseUrl}/v1/chat/completions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model, messages: prompt, stream: false }),
+          signal
+        })
+      } catch (err) {
+        throw err
+      }
+      if (!response.ok) throw new Error(`LM Studio error: ${response.status}`)
+      const data = await response.json() as {
+        choices: { message: { content: string } }[]
+      }
+      return data.choices[0].message.content
     },
 
     async chatStream({ model, messages, onToken, signal }) {

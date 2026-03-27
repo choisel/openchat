@@ -13,7 +13,8 @@ function makeMockClient(responseText = ''): LmStudioClient {
     chatStream: vi.fn(async ({ onToken }) => {
       onToken(responseText)
       return {}
-    })
+    }),
+    summarize: vi.fn().mockResolvedValue('Mock summary')
   }
 }
 
@@ -131,7 +132,8 @@ describe('ModelRouter', () => {
             signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
           })
           return {}
-        })
+        }),
+        summarize: vi.fn().mockResolvedValue('Mock summary')
       }
       const router = new ModelRouter(client)
       const result = await router.resolveModel('explain quantum computing', [m1, m2])
@@ -173,7 +175,8 @@ describe('ModelRouter', () => {
         chatStream: vi.fn(async ({ onToken }) => {
           onToken(responses[callCount++])
           return {}
-        })
+        }),
+        summarize: vi.fn().mockResolvedValue('Mock summary')
       }
       const flexRouter = new ModelRouter(flexClient)
       await flexRouter.resolveModel('question', [m1, m2]) // fails → counter = 1
@@ -220,7 +223,8 @@ describe('ModelRouter', () => {
             signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
           })
           return {}
-        })
+        }),
+        summarize: vi.fn().mockResolvedValue('Mock summary')
       }
       const router = new ModelRouter(client)
       const result = await router.resolveModel('summarize this document', models)
@@ -237,7 +241,8 @@ describe('ModelRouter', () => {
         chatStream: vi.fn(async ({ onToken }) => {
           onToken(responses[callCount++])
           return {}
-        })
+        }),
+        summarize: vi.fn().mockResolvedValue('Mock summary')
       }
       const router = new ModelRouter(client)
       await router.resolveModel('question', models)
@@ -255,7 +260,8 @@ describe('ModelRouter', () => {
           capturedMessages = messages
           onToken('llama-70b')
           return {}
-        })
+        }),
+        summarize: vi.fn().mockResolvedValue('Mock summary')
       }
       const router = new ModelRouter(client)
       await router.resolveModel('summarize this document', models)

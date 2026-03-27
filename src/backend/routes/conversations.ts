@@ -1,7 +1,8 @@
 import { Router } from 'express'
 import type { Db } from '../db'
+import type { LmStudioClient } from '../lmstudio-client'
 
-export function createConversationsRouter(db: Db): Router {
+export function createConversationsRouter(db: Db, lmClient: LmStudioClient): Router {
   const router = Router()
 
   router.get('/', (_req, res) => {
@@ -61,6 +62,60 @@ export function createConversationsRouter(db: Db): Router {
     const messages = db.getMessages(conversationId)
     const message = messages.find(m => m.id === msgId)
     res.status(201).json(message)
+  })
+
+  router.post('/:id/compact', async (req, res) => {
+    const conversationId = Number(req.params.id)
+    const existing = db.getConversation(conversationId)
+    if (!existing) { res.status(404).json({ error: 'Not found' }); return }
+
+    const keep: number = typeof req.body?.keep === 'number' ? req.body.keep : 4
+    const allMessages = db.getMessages(conversationId)
+    const toSummarize = allMessages.slice(0, allMessages.length - keep)
+
+    if (toSummarize.length === 0) {
+      // Nothing to compact — return current messages as-is
+      res.json({ messages: allMessages })
+      return
+    }
+
+    const model = existing.model
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 30_000)
+
+    let summary: string
+    try {
+      const promptMessages = toSummarize.map(m => ({ role: m.role, content: m.content }))
+      summary = await lmClient.summarize(promptMessages, model, controller.signal)
+    } catch {
+      clearTimeout(timer)
+      res.status(422).json({ error: 'compaction_failed' })
+      return
+    }
+    clearTimeout(timer)
+
+    const keptMessages = allMessages.slice(allMessages.length - keep)
+    const summarizedCount = toSummarize.length
+
+    // Delete all existing messages for this conversation
+    db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(conversationId)
+
+    // Insert summary as first assistant message
+    db.addMessage({ conversationId, role: 'assistant', content: summary, tokens: 0 })
+
+    // Re-insert the kept messages, preserving original metadata
+    const insertMsg = db.prepare(
+      'INSERT INTO messages (conversation_id, role, content, tokens, exact_tokens, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+    )
+    for (const m of keptMessages) {
+      insertMsg.run(conversationId, m.role, m.content, m.tokens, m.exact_tokens, m.created_at)
+    }
+
+    // Insert compaction marker
+    db.addCompactedMarker(conversationId, summarizedCount)
+
+    const updatedMessages = db.getMessages(conversationId)
+    res.json({ messages: updatedMessages })
   })
 
   return router

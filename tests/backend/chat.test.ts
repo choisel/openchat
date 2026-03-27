@@ -17,6 +17,7 @@ function makeMockClient(overrides: Partial<LmStudioClient> = {}): LmStudioClient
       onToken(' world')
       return { usage: { prompt_tokens: 10, completion_tokens: 5 } }
     }),
+    summarize: vi.fn().mockResolvedValue('Mock summary'),
     ...overrides,
   }
 }

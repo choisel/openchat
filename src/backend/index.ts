@@ -20,7 +20,7 @@ export function createApp({ db, lmStudioUrl, lmClient }: AppOptions) {
   const resolvedClient = lmClient ?? createLmStudioClient(lmStudioUrl)
   const modelRouter = new ModelRouter(resolvedClient)
 
-  app.use('/api/conversations', createConversationsRouter(db))
+  app.use('/api/conversations', createConversationsRouter(db, resolvedClient))
   app.use('/api/lmstudio', createLmStudioRouter(resolvedClient, db, modelRouter))
   app.use('/api/chat', createChatRouter(resolvedClient, db, modelRouter))
 
