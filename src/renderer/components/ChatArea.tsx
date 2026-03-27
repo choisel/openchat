@@ -18,6 +18,7 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
   const [isStreaming, setIsStreaming] = useState(false)
   const [abortController, setAbortController] = useState<AbortController | null>(null)
   const [usedTokens, setUsedTokens] = useState(0)
+  const [streamingBaseTokens, setStreamingBaseTokens] = useState(0)
   const [inputText, setInputText] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -52,6 +53,13 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [streamingContent])
 
+  // Abort any in-flight stream when the component unmounts
+  useEffect(() => {
+    return () => {
+      abortController?.abort()
+    }
+  }, [abortController])
+
   async function handleSend() {
     if (!inputText.trim() || isStreaming || !conversation) return
 
@@ -60,11 +68,18 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
 
     const estimatedUserTokens = estimateTokens(text)
 
-    // Create user message on backend
-    const userMsg = await api.sendMessage(conversation.id, 'user', text, estimatedUserTokens)
+    let userMsg, assistantMsg
+    try {
+      // Create user message on backend
+      userMsg = await api.sendMessage(conversation.id, 'user', text, estimatedUserTokens)
 
-    // Pre-create empty assistant message
-    const assistantMsg = await api.sendMessage(conversation.id, 'assistant', '', 0)
+      // Pre-create empty assistant message
+      assistantMsg = await api.sendMessage(conversation.id, 'assistant', '', 0)
+    } catch (err) {
+      console.error('Failed to create messages:', err)
+      setInputText(text)
+      return
+    }
 
     setMessages(prev => [...prev, userMsg, assistantMsg])
     setUsedTokens(prev => prev + estimatedUserTokens)
@@ -76,11 +91,14 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
     setAbortController(controller)
 
     // Capture base token count before streaming (user msg + previous messages)
-    const baseTokens = usedTokens + estimatedUserTokens
+    // Use messages array directly to avoid stale usedTokens closure value
+    const baseTokens = messages.reduce((sum, m) => sum + (m.tokens ?? 0), 0) + estimatedUserTokens
+    setStreamingBaseTokens(baseTokens)
 
     // Use refs-like approach via closure: track streaming content locally
     let accumulated = ''
 
+    try {
     api.streamChat(
       conversation.id,
       assistantMsg.id,
@@ -119,6 +137,16 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
       },
       controller.signal
     )
+    } catch (err) {
+      console.error('Failed to start streaming:', err)
+      setInputText(text)
+      setIsStreaming(false)
+      setAbortController(null)
+      setStreamingContent('')
+      setStreamingAssistantId(null)
+      setMessages(prev => prev.filter(m => m.id !== userMsg.id && m.id !== assistantMsg.id))
+      controller.abort()
+    }
   }
 
   function handleStop() {
@@ -163,7 +191,7 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
             key={msg.id}
             role={msg.role}
             content={msg.id === streamingAssistantId ? streamingContent || msg.content : msg.content}
-            tokens={msg.id === streamingAssistantId ? estimateTokens(streamingContent) : msg.tokens}
+            tokens={msg.id === streamingAssistantId ? usedTokens - streamingBaseTokens : msg.tokens}
             isStreaming={isStreaming && msg.id === streamingAssistantId}
           />
         ))}

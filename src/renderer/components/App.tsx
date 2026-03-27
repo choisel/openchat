@@ -9,7 +9,7 @@ export function App() {
 
   useEffect(() => {
     function fetchModels() {
-      api.listModels().then(list => setModels(list.map(m => m.id))).catch(() => {})
+      api.listModels().then(list => setModels(list.map(m => m.id))).catch((err) => console.error('Failed to fetch models:', err))
     }
     fetchModels()
     const interval = setInterval(fetchModels, 30_000)
