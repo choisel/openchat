@@ -58,4 +58,73 @@ describe('conversations API', () => {
     expect(res.body).toHaveLength(1)
     expect(res.body[0].content).toBe('Hello')
   })
+
+  it('PATCH /api/conversations/:id updates model', async () => {
+    const create = await request(app)
+      .post('/api/conversations')
+      .send({ name: 'Chat', model: 'auto' })
+    const id = create.body.id
+    const res = await request(app)
+      .patch(`/api/conversations/${id}`)
+      .send({ model: 'phi-2' })
+    expect(res.status).toBe(200)
+    expect(res.body.model).toBe('phi-2')
+    expect(res.body.name).toBe('Chat')
+  })
+
+  it('PATCH /api/conversations/:id updates name', async () => {
+    const create = await request(app)
+      .post('/api/conversations')
+      .send({ name: 'Old name', model: 'auto' })
+    const id = create.body.id
+    const res = await request(app)
+      .patch(`/api/conversations/${id}`)
+      .send({ name: 'New name' })
+    expect(res.status).toBe(200)
+    expect(res.body.name).toBe('New name')
+    expect(res.body.model).toBe('auto')
+  })
+
+  it('PATCH /api/conversations/:id returns 404 for unknown id', async () => {
+    const res = await request(app)
+      .patch('/api/conversations/9999')
+      .send({ model: 'phi-2' })
+    expect(res.status).toBe(404)
+  })
+
+  it('POST /api/conversations/:id/messages persists a message', async () => {
+    const create = await request(app)
+      .post('/api/conversations')
+      .send({ name: 'Chat', model: 'auto' })
+    const id = create.body.id
+    const res = await request(app)
+      .post(`/api/conversations/${id}/messages`)
+      .send({ role: 'user', content: 'hi', tokens: 0 })
+    expect(res.status).toBe(201)
+    expect(res.body.id).toBeDefined()
+    expect(res.body.role).toBe('user')
+    expect(res.body.content).toBe('hi')
+    expect(res.body.tokens).toBe(0)
+    const messages = db.getMessages(id)
+    expect(messages).toHaveLength(1)
+    expect(messages[0].content).toBe('hi')
+  })
+
+  it('POST /api/conversations/:id/messages returns 404 for unknown conversation', async () => {
+    const res = await request(app)
+      .post('/api/conversations/9999/messages')
+      .send({ role: 'user', content: 'hi', tokens: 0 })
+    expect(res.status).toBe(404)
+  })
+
+  it('updateMessageTokens corrects token count', async () => {
+    const create = await request(app)
+      .post('/api/conversations')
+      .send({ name: 'Chat', model: 'auto' })
+    const convId = create.body.id
+    const msgId = db.addMessage({ conversationId: convId, role: 'assistant', content: 'Hello!', tokens: 0 })
+    db.updateMessageTokens(msgId, 42)
+    const messages = db.getMessages(convId)
+    expect(messages[0].tokens).toBe(42)
+  })
 })

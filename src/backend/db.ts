@@ -23,9 +23,11 @@ export interface Db {
   createConversation: (args: { name: string; model: string }) => number
   getConversation: (id: number) => Conversation | undefined
   listConversations: () => Conversation[]
+  updateConversation: (id: number, fields: { name?: string; model?: string }) => void
   deleteConversation: (id: number) => void
   addMessage: (args: { conversationId: number; role: 'user' | 'assistant'; content: string; tokens: number }) => number
   getMessages: (conversationId: number) => Message[]
+  updateMessageTokens: (id: number, tokens: number) => void
 }
 
 export function createDb(dbPath: string): Db {
