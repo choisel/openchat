@@ -1,24 +1,28 @@
 import express from 'express'
 import type { Db } from './db'
 import { createLmStudioClient } from './lmstudio-client'
+import type { LmStudioClient } from './lmstudio-client'
 import { createConversationsRouter } from './routes/conversations'
-import { createLmStudioRouter } from './routes/lmstudio'
+import { createLmStudioRouter, createChatRouter } from './routes/lmstudio'
 
 interface AppOptions {
   db: Db
   lmStudioUrl: string
+  /** Optional: inject a pre-built client (useful in tests) */
+  lmClient?: LmStudioClient
 }
 
-export function createApp({ db, lmStudioUrl }: AppOptions) {
+export function createApp({ db, lmStudioUrl, lmClient }: AppOptions) {
   const app = express()
   app.use(express.json())
 
-  const lmClient = createLmStudioClient(lmStudioUrl)
+  const resolvedClient = lmClient ?? createLmStudioClient(lmStudioUrl)
 
   app.use('/api/conversations', createConversationsRouter(db))
-  app.use('/api/lmstudio', createLmStudioRouter(lmClient))
+  app.use('/api/lmstudio', createLmStudioRouter(resolvedClient, db))
+  app.use('/api/chat', createChatRouter(resolvedClient, db))
 
-  return { app, lmClient }
+  return { app, lmClient: resolvedClient }
 }
 
 // Entry point when spawned as child process
