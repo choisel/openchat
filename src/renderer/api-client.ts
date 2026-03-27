@@ -69,5 +69,88 @@ export const api = {
     const base = await getBaseUrl()
     const res = await fetch(`${base}/api/lmstudio/models`)
     return res.json()
+  },
+
+  async sendMessage(conversationId: number, role: 'user' | 'assistant', content: string, tokens: number): Promise<Message> {
+    const base = await getBaseUrl()
+    const res = await fetch(`${base}/api/conversations/${conversationId}/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role, content, tokens })
+    })
+    return res.json()
+  },
+
+  async updateConversationModel(conversationId: number, model: string): Promise<Conversation> {
+    const base = await getBaseUrl()
+    const res = await fetch(`${base}/api/conversations/${conversationId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model })
+    })
+    return res.json()
+  },
+
+  async streamChat(
+    conversationId: number,
+    assistantMessageId: number,
+    onToken: (token: string) => void,
+    onDone: (usage?: { prompt_tokens: number; completion_tokens: number }) => void,
+    onError: (message: string) => void,
+    signal: AbortSignal
+  ): Promise<void> {
+    const base = await getBaseUrl()
+    const res = await fetch(`${base}/api/chat/${conversationId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ assistantMessageId }),
+      signal
+    })
+
+    if (!res.body) {
+      onError('No response body')
+      return
+    }
+
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (line.startsWith('data:')) {
+            const jsonStr = line.slice(5).trim()
+            if (jsonStr) {
+              try {
+                const event = JSON.parse(jsonStr)
+                if (event.type === 'token') {
+                  onToken(event.token)
+                } else if (event.type === 'done') {
+                  onDone(event.usage)
+                } else if (event.type === 'error') {
+                  onError(event.message)
+                }
+              } catch (e) {
+                onError(`Failed to parse event: ${jsonStr}`)
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      if (e instanceof Error && e.name !== 'AbortError') {
+        onError(e.message)
+      }
+    } finally {
+      reader.releaseLock()
+    }
   }
 }
