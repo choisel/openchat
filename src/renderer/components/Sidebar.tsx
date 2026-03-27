@@ -10,9 +10,10 @@ interface Props {
   onNew: () => void
   onNewTemp: () => void
   onPromote: (tempId: string, conv: Conversation) => void
+  prependConversation?: Conversation | null
 }
 
-export function Sidebar({ selectedId, selectedTempId, onSelect, onSelectTemp, onNew, onNewTemp, onPromote }: Props) {
+export function Sidebar({ selectedId, selectedTempId, onSelect, onSelectTemp, onNew, onNewTemp, onPromote, prependConversation }: Props) {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [connected, setConnected] = useState(false)
   const [tempSessions] = useTempSessions()
@@ -26,6 +27,14 @@ export function Sidebar({ selectedId, selectedTempId, onSelect, onSelectTemp, on
     }, 30_000)
     return () => clearInterval(interval)
   }, [])
+
+  useEffect(() => {
+    if (!prependConversation) return
+    setConversations(prev => {
+      if (prev.some(c => c.id === prependConversation.id)) return prev
+      return [prependConversation, ...prev]
+    })
+  }, [prependConversation])
 
   async function handlePromote(e: React.MouseEvent, tempId: string) {
     e.stopPropagation()

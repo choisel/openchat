@@ -134,6 +134,32 @@ export const api = {
     })
   },
 
+  async forkConversation(conversationId: number, fromMessageId: number): Promise<Conversation> {
+    const base = await getBaseUrl()
+    const res = await fetch(`${base}/api/conversations/${conversationId}/fork`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fromMessageId })
+    })
+    if (!res.ok) {
+      throw new Error(`Fork failed: ${res.status}`)
+    }
+    return res.json()
+  },
+
+  async compactConversation(conversationId: number, keep?: number): Promise<{ messages: Message[] }> {
+    const base = await getBaseUrl()
+    const res = await fetch(`${base}/api/conversations/${conversationId}/compact`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: keep !== undefined ? JSON.stringify({ keep }) : '{}'
+    })
+    if (!res.ok) {
+      throw new Error(`Compaction failed: ${res.status}`)
+    }
+    return res.json()
+  },
+
   async streamChat(
     conversationId: number,
     assistantMessageId: number,

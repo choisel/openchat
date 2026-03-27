@@ -9,9 +9,12 @@ interface ChatAreaProps {
   models: string[]
   contextWindow: number
   onConversationUpdate: (conv: Conversation) => void
+  onFork: (newConversation: Conversation) => void
 }
 
-export function ChatArea({ conversation, models, contextWindow, onConversationUpdate }: ChatAreaProps) {
+type CompactState = 'idle' | 'queued' | 'running' | 'error'
+
+export function ChatArea({ conversation, models, contextWindow, onConversationUpdate, onFork }: ChatAreaProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [streamingContent, setStreamingContent] = useState('')
   const [streamingAssistantId, setStreamingAssistantId] = useState<number | null>(null)
@@ -20,10 +23,44 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
   const [usedTokens, setUsedTokens] = useState(0)
   const [streamingBaseTokens, setStreamingBaseTokens] = useState(0)
   const [inputText, setInputText] = useState('')
+  const [compactState, setCompactState] = useState<CompactState>('idle')
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  async function runCompaction(convId: number) {
+    setCompactState('running')
+    try {
+      const result = await api.compactConversation(convId)
+      setMessages(result.messages)
+      const total = result.messages.reduce((sum, m) => sum + (m.exact_tokens ?? m.tokens), 0)
+      setUsedTokens(total)
+      setCompactState('idle')
+    } catch (err) {
+      console.error('Compaction failed:', err)
+      setCompactState('error')
+      if (errorTimerRef.current) clearTimeout(errorTimerRef.current)
+      errorTimerRef.current = setTimeout(() => setCompactState('idle'), 4000)
+    }
+  }
+
+  function handleCompactRequest(convId: number) {
+    if (compactState === 'queued') {
+      // Cancel the pending compaction
+      setCompactState('idle')
+      return
+    }
+    if (isStreaming) {
+      setCompactState('queued')
+      return
+    }
+    runCompaction(convId)
+  }
 
   // Load messages when conversation changes
   useEffect(() => {
+    if (errorTimerRef.current) clearTimeout(errorTimerRef.current)
+    setCompactState('idle')
+
     if (!conversation) {
       setMessages([])
       setUsedTokens(0)
@@ -134,6 +171,14 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
             console.error('Failed to persist user token count:', e)
           )
         }
+        // Fire queued compaction after stream completes
+        setCompactState(prev => {
+          if (prev === 'queued') {
+            runCompaction(conversation.id)
+            return 'running'
+          }
+          return prev
+        })
       },
       (message: string) => {
         setMessages(prev =>
@@ -176,6 +221,16 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
     onConversationUpdate({ ...conversation, name })
   }
 
+  async function handleFork(messageId: number) {
+    if (!conversation) return
+    try {
+      const newConversation = await api.forkConversation(conversation.id, messageId)
+      onFork(newConversation)
+    } catch (err) {
+      console.error('Fork failed:', err)
+    }
+  }
+
   if (!conversation) {
     return (
       <div style={styles.empty}>
@@ -194,9 +249,11 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
         usedTokens={usedTokens}
         contextWindow={contextWindow}
         isStreaming={isStreaming}
+        compactState={compactState}
         onModelChange={handleModelChange}
         onStop={handleStop}
         onNameChange={handleNameChange}
+        onCompactRequest={() => handleCompactRequest(conversation.id)}
       />
       <div style={styles.messages}>
         {messages.map(msg => {
@@ -213,6 +270,7 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
               tokens={displayTokens}
               exact_tokens={isStreamingMsg ? undefined : msg.exact_tokens}
               isStreaming={isStreamingMsg}
+              onFork={() => handleFork(msg.id)}
             />
           )
         })}

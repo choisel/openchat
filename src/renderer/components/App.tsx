@@ -8,6 +8,7 @@ import { tempSessionStore, type TempSession } from '../temp-session-store'
 export function App() {
   const [selected, setSelected] = useState<Conversation | null>(null)
   const [selectedTemp, setSelectedTemp] = useState<TempSession | null>(null)
+  const [lastForked, setLastForked] = useState<Conversation | null>(null)
   const [modelList, setModelList] = useState<LmModel[]>([])
   const [consecutiveFailures, setConsecutiveFailures] = useState(0)
   const [dismissed, setDismissed] = useState(false)
@@ -67,6 +68,12 @@ export function App() {
     setSelected(conv)
   }
 
+  function handleFork(newConversation: Conversation) {
+    setLastForked(newConversation)
+    setSelectedTemp(null)
+    setSelected(newConversation)
+  }
+
   const showBanner = consecutiveFailures >= 3 && !dismissed
 
   const models = modelList.map(m => m.id)
@@ -87,12 +94,14 @@ export function App() {
           onNew={handleNew}
           onNewTemp={handleNewTemp}
           onPromote={handlePromote}
+          prependConversation={lastForked}
         />
         <ChatArea
           conversation={selected}
           models={models}
           contextWindow={contextWindow}
           onConversationUpdate={setSelected}
+          onFork={handleFork}
         />
       </div>
     </div>

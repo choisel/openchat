@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 interface Props {
   role: 'user' | 'assistant'
   content: string
@@ -5,14 +7,20 @@ interface Props {
   exact_tokens?: number | null
   modelName?: string
   isStreaming?: boolean
+  onFork?: () => void
 }
 
-export function MessageBubble({ role, content, tokens, exact_tokens, modelName, isStreaming }: Props) {
+export function MessageBubble({ role, content, tokens, exact_tokens, modelName, isStreaming, onFork }: Props) {
+  const [hovered, setHovered] = useState(false)
   const displayTokens = exact_tokens ?? tokens
   const isUser = role === 'user'
 
   return (
-    <div style={isUser ? styles.wrapperUser : styles.wrapperAssistant}>
+    <div
+      style={isUser ? styles.wrapperUser : styles.wrapperAssistant}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
       {!isUser && modelName && (
         <span style={styles.modelLabel}>{modelName}</span>
       )}
@@ -22,7 +30,18 @@ export function MessageBubble({ role, content, tokens, exact_tokens, modelName, 
           {isStreaming && <span className="streaming-cursor">▋</span>}
         </span>
       </div>
-      <span style={styles.tokenAnnotation}>{displayTokens} tokens</span>
+      <div style={styles.metaRow}>
+        <span style={styles.tokenAnnotation}>{displayTokens} tokens</span>
+        {onFork && hovered && !isStreaming && (
+          <button
+            style={styles.forkBtn}
+            onClick={onFork}
+            title="Fork conversation from here"
+          >
+            ⑂ Fork
+          </button>
+        )}
+      </div>
     </div>
   )
 }
@@ -63,9 +82,23 @@ const styles: Record<string, React.CSSProperties> = {
     whiteSpace: 'pre-wrap',
     wordBreak: 'break-word',
   },
+  metaRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 4,
+  },
   tokenAnnotation: {
     color: '#48484a',
     fontSize: 11,
-    marginTop: 4,
+  },
+  forkBtn: {
+    background: 'transparent',
+    border: '1px solid #3a3a3c',
+    borderRadius: 4,
+    color: '#8e8e93',
+    fontSize: 10,
+    cursor: 'pointer',
+    padding: '2px 6px',
   },
 }
