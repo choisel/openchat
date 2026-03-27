@@ -8,7 +8,7 @@ interface Props {
 function formatK(n: number): string {
   const k = n / 1000
   const rounded = Math.round(k * 10) / 10
-  return rounded % 1 === 0 ? `${rounded}k` : `${rounded}k`
+  return rounded % 1 === 0 ? `${Math.floor(rounded)}k` : `${rounded}k`
 }
 
 export function ContextBar({ usedTokens, contextWindow }: Props) {

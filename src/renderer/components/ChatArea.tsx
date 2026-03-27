@@ -92,7 +92,7 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
 
     // Capture base token count before streaming (user msg + previous messages)
     // Use messages array directly to avoid stale usedTokens closure value
-    const baseTokens = messages.reduce((sum, m) => sum + (m.tokens ?? 0), 0) + estimatedUserTokens
+    const baseTokens = messages.reduce((sum, m) => sum + (m.exact_tokens ?? m.tokens ?? 0), 0) + estimatedUserTokens
     setStreamingBaseTokens(baseTokens)
 
     // Use refs-like approach via closure: track streaming content locally
