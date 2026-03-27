@@ -14,6 +14,13 @@ async function getBaseUrl(): Promise<string> {
   return baseUrl
 }
 
+export interface LmModel {
+  id: string
+  owned_by?: string
+  object?: string
+  context_length?: number
+}
+
 export interface Conversation {
   id: number
   name: string
@@ -65,7 +72,7 @@ export const api = {
     return res.json()
   },
 
-  async listModels(): Promise<{ id: string }[]> {
+  async listModels(): Promise<LmModel[]> {
     const base = await getBaseUrl()
     const res = await fetch(`${base}/api/lmstudio/models`)
     return res.json()

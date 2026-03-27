@@ -2,6 +2,7 @@ export interface LmModel {
   id: string
   owned_by: string
   object?: string
+  context_length?: number
 }
 
 export interface LmStudioClient {
