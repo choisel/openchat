@@ -103,6 +103,13 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
     }
   }, [abortController])
 
+  // Cleanup error timer on unmount to prevent setState after unmount
+  useEffect(() => {
+    return () => {
+      if (errorTimerRef.current) clearTimeout(errorTimerRef.current)
+    }
+  }, [])
+
   async function handleSend() {
     if (!inputText.trim() || isStreaming || !conversation) return
 
