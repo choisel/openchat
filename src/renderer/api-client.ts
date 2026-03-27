@@ -71,6 +71,12 @@ export const api = {
     return res.json()
   },
 
+  async getRoutingHealth(): Promise<{ consecutiveFailures: number }> {
+    const base = await getBaseUrl()
+    const res = await fetch(`${base}/api/lmstudio/routing-health`)
+    return res.json()
+  },
+
   async sendMessage(conversationId: number, role: 'user' | 'assistant', content: string, tokens: number): Promise<Message> {
     const base = await getBaseUrl()
     const res = await fetch(`${base}/api/conversations/${conversationId}/messages`, {
