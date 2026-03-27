@@ -72,6 +72,17 @@ export function createDb(dbPath: string): Db {
       return db.prepare('SELECT * FROM conversations ORDER BY updated_at DESC, id DESC').all() as Conversation[]
     },
 
+    updateConversation(id, fields) {
+      const setClauses: string[] = []
+      const values: unknown[] = []
+      if (fields.name !== undefined) { setClauses.push('name = ?'); values.push(fields.name) }
+      if (fields.model !== undefined) { setClauses.push('model = ?'); values.push(fields.model) }
+      if (setClauses.length === 0) return
+      setClauses.push("updated_at = strftime('%Y-%m-%dT%H:%M:%f', 'now')")
+      values.push(id)
+      db.prepare(`UPDATE conversations SET ${setClauses.join(', ')} WHERE id = ?`).run(...values)
+    },
+
     deleteConversation(id) {
       db.prepare('DELETE FROM conversations WHERE id = ?').run(id)
     },
@@ -90,6 +101,10 @@ export function createDb(dbPath: string): Db {
       return db.prepare(
         'SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC'
       ).all(conversationId) as Message[]
+    },
+
+    updateMessageTokens(id, tokens) {
+      db.prepare('UPDATE messages SET tokens = ? WHERE id = ?').run(tokens, id)
     }
   }
 }
