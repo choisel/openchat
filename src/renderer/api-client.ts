@@ -91,6 +91,16 @@ export const api = {
     return res.json()
   },
 
+  async updateConversation(conversationId: number, fields: Partial<Pick<Conversation, 'name' | 'model'>>): Promise<Conversation> {
+    const base = await getBaseUrl()
+    const res = await fetch(`${base}/api/conversations/${conversationId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(fields)
+    })
+    return res.json()
+  },
+
   async streamChat(
     conversationId: number,
     assistantMessageId: number,
