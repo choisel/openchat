@@ -2,20 +2,20 @@ import { useEffect, useRef, useState } from 'react'
 import { Sidebar } from './Sidebar'
 import { ChatArea } from './ChatArea'
 import { RoutingWarningBanner } from './RoutingWarningBanner'
-import { api, type Conversation } from '../api-client'
+import { api, type Conversation, type LmModel } from '../api-client'
 import { tempSessionStore, type TempSession } from '../temp-session-store'
 
 export function App() {
   const [selected, setSelected] = useState<Conversation | null>(null)
   const [selectedTemp, setSelectedTemp] = useState<TempSession | null>(null)
-  const [models, setModels] = useState<string[]>([])
+  const [modelList, setModelList] = useState<LmModel[]>([])
   const [consecutiveFailures, setConsecutiveFailures] = useState(0)
   const [dismissed, setDismissed] = useState(false)
   const prevFailuresRef = useRef(0)
 
   useEffect(() => {
     function fetchModels() {
-      api.listModels().then(list => setModels(list.map(m => m.id))).catch((err) => console.error('Failed to fetch models:', err))
+      api.listModels().then(list => setModelList(list)).catch((err) => console.error('Failed to fetch models:', err))
     }
     fetchModels()
     const interval = setInterval(fetchModels, 30_000)
@@ -69,6 +69,12 @@ export function App() {
 
   const showBanner = consecutiveFailures >= 3 && !dismissed
 
+  const models = modelList.map(m => m.id)
+
+  const activeModel = selected?.model ?? selectedTemp?.model ?? null
+  const matchedModel = activeModel ? modelList.find(m => m.id === activeModel) : null
+  const contextWindow = matchedModel?.context_length ?? 4096
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#1c1c1e', color: '#e5e5ea', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }}>
       {showBanner && <RoutingWarningBanner onDismiss={() => setDismissed(true)} />}
@@ -85,7 +91,7 @@ export function App() {
         <ChatArea
           conversation={selected}
           models={models}
-          contextWindow={4096}
+          contextWindow={contextWindow}
           onConversationUpdate={setSelected}
         />
       </div>

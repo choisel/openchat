@@ -36,7 +36,7 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
 
     api.getMessages(conversation.id).then(msgs => {
       setMessages(msgs)
-      const total = msgs.reduce((sum, m) => sum + m.tokens, 0)
+      const total = msgs.reduce((sum, m) => sum + (m.exact_tokens ?? m.tokens), 0)
       setUsedTokens(total)
       setStreamingContent('')
       setStreamingAssistantId(null)
