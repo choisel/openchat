@@ -3,6 +3,8 @@ import { api } from '../api-client'
 import { ModelSelector } from './ModelSelector'
 import { ContextBar } from './ContextBar'
 
+type CompactState = 'idle' | 'queued' | 'running' | 'error'
+
 interface Props {
   conversationId: number
   conversationName: string
@@ -11,9 +13,11 @@ interface Props {
   usedTokens: number
   contextWindow: number
   isStreaming: boolean
+  compactState: CompactState
   onModelChange: (model: string) => void
   onStop: () => void
   onNameChange: (name: string) => void
+  onCompactRequest: () => void
 }
 
 export function TopBar({
@@ -24,9 +28,11 @@ export function TopBar({
   usedTokens,
   contextWindow,
   isStreaming,
+  compactState,
   onModelChange,
   onStop,
   onNameChange,
+  onCompactRequest,
 }: Props) {
   const [editing, setEditing] = useState(false)
   const [draftName, setDraftName] = useState(conversationName)
@@ -49,45 +55,72 @@ export function TopBar({
     }
   }
 
+  function compactLabel() {
+    if (compactState === 'queued') return '⏱'
+    if (compactState === 'running') return '…'
+    return 'Compact'
+  }
+
   return (
-    <div style={styles.bar}>
-      <div style={styles.left}>
-        {editing ? (
-          <input
-            style={styles.nameInput}
-            value={draftName}
-            autoFocus
-            onChange={e => setDraftName(e.target.value)}
-            onBlur={commitName}
-            onKeyDown={handleKeyDown}
+    <div style={styles.wrapper}>
+      <div style={styles.bar}>
+        <div style={styles.left}>
+          {editing ? (
+            <input
+              style={styles.nameInput}
+              value={draftName}
+              autoFocus
+              onChange={e => setDraftName(e.target.value)}
+              onBlur={commitName}
+              onKeyDown={handleKeyDown}
+            />
+          ) : (
+            <span style={styles.name} onDoubleClick={handleDoubleClick}>
+              {conversationName}
+            </span>
+          )}
+        </div>
+        <div style={styles.center}>
+          <ModelSelector
+            models={models}
+            selectedModel={selectedModel}
+            conversationId={conversationId}
+            onModelChange={onModelChange}
           />
-        ) : (
-          <span style={styles.name} onDoubleClick={handleDoubleClick}>
-            {conversationName}
-          </span>
-        )}
-      </div>
-      <div style={styles.center}>
-        <ModelSelector
-          models={models}
-          selectedModel={selectedModel}
-          conversationId={conversationId}
-          onModelChange={onModelChange}
-        />
-      </div>
-      <div style={styles.right}>
-        <ContextBar usedTokens={usedTokens} contextWindow={contextWindow} />
-        {isStreaming && (
-          <button style={styles.stopBtn} onClick={onStop}>
-            Stop
+        </div>
+        <div style={styles.right}>
+          <ContextBar usedTokens={usedTokens} contextWindow={contextWindow} />
+          <button
+            style={{
+              ...styles.compactBtn,
+              ...(compactState === 'running' ? styles.compactBtnDisabled : {}),
+            }}
+            onClick={onCompactRequest}
+            disabled={compactState === 'running'}
+            title={compactState === 'queued' ? 'Click to cancel queued compaction' : 'Compact conversation context'}
+          >
+            {compactLabel()}
           </button>
-        )}
+          {isStreaming && (
+            <button style={styles.stopBtn} onClick={onStop}>
+              Stop
+            </button>
+          )}
+        </div>
       </div>
+      {compactState === 'error' && (
+        <div style={styles.errorBanner}>
+          Compaction failed — conversation unchanged
+        </div>
+      )}
     </div>
   )
 }
 
 const styles: Record<string, React.CSSProperties> = {
+  wrapper: {
+    flexShrink: 0,
+  },
   bar: {
     display: 'flex',
     alignItems: 'center',
@@ -96,6 +129,26 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '0 16px',
     borderBottom: '1px solid #3a3a3c',
     gap: 12,
+  },
+  errorBanner: {
+    background: '#3a0000',
+    color: '#ff6b6b',
+    fontSize: 12,
+    padding: '6px 16px',
+    borderBottom: '1px solid #5a1a1a',
+  },
+  compactBtn: {
+    border: '1px solid #48484a',
+    background: 'transparent',
+    color: '#aeaeb2',
+    borderRadius: 12,
+    padding: '4px 12px',
+    fontSize: 13,
+    cursor: 'pointer',
+  },
+  compactBtnDisabled: {
+    opacity: 0.5,
+    cursor: 'not-allowed',
   },
   left: {
     flex: 1,
