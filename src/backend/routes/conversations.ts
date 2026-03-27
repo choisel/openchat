@@ -97,22 +97,7 @@ export function createConversationsRouter(db: Db, lmClient: LmStudioClient): Rou
     const keptMessages = allMessages.slice(allMessages.length - keep)
     const summarizedCount = toSummarize.length
 
-    // Delete all existing messages for this conversation
-    db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(conversationId)
-
-    // Insert summary as first assistant message
-    db.addMessage({ conversationId, role: 'assistant', content: summary, tokens: 0 })
-
-    // Re-insert the kept messages, preserving original metadata
-    const insertMsg = db.prepare(
-      'INSERT INTO messages (conversation_id, role, content, tokens, exact_tokens, created_at) VALUES (?, ?, ?, ?, ?, ?)'
-    )
-    for (const m of keptMessages) {
-      insertMsg.run(conversationId, m.role, m.content, m.tokens, m.exact_tokens, m.created_at)
-    }
-
-    // Insert compaction marker
-    db.addCompactedMarker(conversationId, summarizedCount)
+    db.compactConversation(conversationId, summary, keptMessages, summarizedCount)
 
     const updatedMessages = db.getMessages(conversationId)
     res.json({ messages: updatedMessages })

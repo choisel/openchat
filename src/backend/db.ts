@@ -34,6 +34,7 @@ export interface Db {
   getMessages: (conversationId: number) => Message[]
   updateMessageTokens: (id: number, exact: number) => void
   addCompactedMarker: (conversationId: number, summaryMessageCount: number) => void
+  compactConversation: (id: number, summary: string, keptMessages: Message[], summarizedCount: number) => void
   forkConversation: (id: number, fromMessageId: number) => Conversation
 }
 
@@ -153,6 +154,33 @@ export function createDb(dbPath: string): Db {
       db.prepare(
         "UPDATE conversations SET updated_at = strftime('%Y-%m-%dT%H:%M:%f', 'now') WHERE id = ?"
       ).run(conversationId)
+    },
+
+    compactConversation(id, summary, keptMessages, summarizedCount) {
+      const deleteAll = db.prepare('DELETE FROM messages WHERE conversation_id = ?')
+      const insertSummary = db.prepare(
+        'INSERT INTO messages (conversation_id, role, content, tokens) VALUES (?, ?, ?, ?)'
+      )
+      const insertKept = db.prepare(
+        'INSERT INTO messages (conversation_id, role, content, tokens, exact_tokens, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+      )
+      const insertMarker = db.prepare(
+        'INSERT INTO messages (conversation_id, role, content, tokens) VALUES (?, ?, ?, ?)'
+      )
+      const updateTs = db.prepare(
+        "UPDATE conversations SET updated_at = strftime('%Y-%m-%dT%H:%M:%f', 'now') WHERE id = ?"
+      )
+
+      db.transaction(() => {
+        deleteAll.run(id)
+        insertSummary.run(id, 'assistant', summary, 0)
+        for (const m of keptMessages) {
+          insertKept.run(id, m.role, m.content, m.tokens, m.exact_tokens, m.created_at)
+        }
+        const markerContent = `[Compacted — ${summarizedCount} messages summarized]`
+        insertMarker.run(id, 'system', markerContent, 0)
+        updateTs.run(id)
+      })()
     },
 
     forkConversation(id, fromMessageId) {

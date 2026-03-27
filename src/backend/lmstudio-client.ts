@@ -67,8 +67,8 @@ export function createLmStudioClient(baseUrl: string): LmStudioClient {
           body: JSON.stringify({ model, messages: prompt, stream: false }),
           signal
         })
-      } catch (err) {
-        throw err
+      } catch {
+        throw new Error('LM Studio unreachable')
       }
       if (!response.ok) throw new Error(`LM Studio error: ${response.status}`)
       const data = await response.json() as {
