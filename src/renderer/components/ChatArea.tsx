@@ -264,8 +264,12 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
   async function handleAutoCompactToggle() {
     if (!conversation) return
     const newValue = conversation.auto_compact_enabled === 1 ? 0 : 1
-    const updated = await api.updateConversation(conversation.id, { auto_compact_enabled: newValue })
-    onConversationUpdate(updated)
+    try {
+      const updated = await api.updateConversation(conversation.id, { auto_compact_enabled: newValue })
+      onConversationUpdate(updated)
+    } catch (err) {
+      console.error('Failed to update auto-compact setting:', err)
+    }
   }
 
   function handleAutoCompactToastCancel() {
@@ -275,7 +279,7 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
 
   function handleAutoCompactToastExpire() {
     setAutoCompactToastVisible(false)
-    runCompaction(conversation!.id)
+    if (conversation) runCompaction(conversation.id)
   }
 
   if (!conversation) {
