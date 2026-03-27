@@ -2,6 +2,7 @@ import express from 'express'
 import type { Db } from './db'
 import { createLmStudioClient } from './lmstudio-client'
 import type { LmStudioClient } from './lmstudio-client'
+import { ModelRouter } from './model-router'
 import { createConversationsRouter } from './routes/conversations'
 import { createLmStudioRouter, createChatRouter } from './routes/lmstudio'
 
@@ -17,10 +18,11 @@ export function createApp({ db, lmStudioUrl, lmClient }: AppOptions) {
   app.use(express.json())
 
   const resolvedClient = lmClient ?? createLmStudioClient(lmStudioUrl)
+  const modelRouter = new ModelRouter(resolvedClient)
 
   app.use('/api/conversations', createConversationsRouter(db))
-  app.use('/api/lmstudio', createLmStudioRouter(resolvedClient, db))
-  app.use('/api/chat', createChatRouter(resolvedClient, db))
+  app.use('/api/lmstudio', createLmStudioRouter(resolvedClient, db, modelRouter))
+  app.use('/api/chat', createChatRouter(resolvedClient, db, modelRouter))
 
   return { app, lmClient: resolvedClient }
 }

@@ -1,8 +1,27 @@
 import { Router } from 'express'
-import type { LmStudioClient } from '../lmstudio-client'
+import type { LmStudioClient, LmModel } from '../lmstudio-client'
 import type { Db } from '../db'
+import type { ModelRouter } from '../model-router'
 
-export function createLmStudioRouter(client: LmStudioClient, db: Db): Router {
+// 30-second in-memory cache for the model list
+interface ModelCache {
+  value: LmModel[]
+  fetchedAt: number
+}
+const MODEL_CACHE_TTL_MS = 30_000
+let modelCache: ModelCache | null = null
+
+async function getCachedModels(client: LmStudioClient): Promise<LmModel[]> {
+  const now = Date.now()
+  if (modelCache && now - modelCache.fetchedAt < MODEL_CACHE_TTL_MS) {
+    return modelCache.value
+  }
+  const value = await client.listModels()
+  modelCache = { value, fetchedAt: now }
+  return value
+}
+
+export function createLmStudioRouter(client: LmStudioClient, db: Db, modelRouter: ModelRouter): Router {
   const router = Router()
 
   router.get('/models', async (_req, res) => {
@@ -19,10 +38,14 @@ export function createLmStudioRouter(client: LmStudioClient, db: Db): Router {
     res.json(result)
   })
 
+  router.get('/routing-health', (_req, res) => {
+    res.json({ consecutiveFailures: modelRouter.getConsecutiveFailures() })
+  })
+
   return router
 }
 
-export function createChatRouter(client: LmStudioClient, db: Db): Router {
+export function createChatRouter(client: LmStudioClient, db: Db, modelRouter: ModelRouter): Router {
   const router = Router()
 
   router.post('/:conversationId', async (req, res) => {
@@ -35,16 +58,21 @@ export function createChatRouter(client: LmStudioClient, db: Db): Router {
       return
     }
 
-    // Resolve model: fall back to first loaded model if "auto" or empty
+    // Resolve model: use ModelRouter when "auto", otherwise use the specified model directly
     let model = conversation.model
     if (!model || model === 'auto') {
+      // Build messages to extract the latest user message for routing
+      const dbMessages = db.getMessages(conversationId)
+      const lastUserMessage = [...dbMessages].reverse().find(m => m.role === 'user')
+      const userMessageText = lastUserMessage?.content ?? ''
+
       try {
-        const models = await client.listModels()
-        if (models.length === 0) {
+        const loadedModels = await getCachedModels(client)
+        if (loadedModels.length === 0) {
           res.status(503).json({ error: 'No models loaded in LM Studio' })
           return
         }
-        model = models[0].id
+        model = await modelRouter.resolveModel(userMessageText, loadedModels)
       } catch {
         res.status(503).json({ error: 'LM Studio unreachable' })
         return
