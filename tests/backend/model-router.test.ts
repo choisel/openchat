@@ -36,10 +36,15 @@ describe('ModelRouter', () => {
     })
 
     it('resets consecutiveFailures to 0 on success', async () => {
-      const client = makeMockClient()
+      // First establish a failure: 2 ambiguous models + garbage LLM response → counter = 1
+      const m1 = makeModel('mistral-7b')
+      const m2 = makeModel('llama-13b')
+      const client = makeMockClient('garbage text that matches no model name')
       const router = new ModelRouter(client)
-      // Force a failure state by calling with 0 models (will throw, so we catch)
-      // We test reset via the public getter after a successful call
+      await router.resolveModel('question', [m1, m2])
+      expect(router.getConsecutiveFailures()).toBe(1)
+
+      // Now resolve with a single model → counter resets to 0
       await router.resolveModel('hello', [makeModel('mistral-7b')])
       expect(router.getConsecutiveFailures()).toBe(0)
     })

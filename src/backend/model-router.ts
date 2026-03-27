@@ -111,15 +111,9 @@ export class ModelRouter {
     return largest.id
   }
 
-  private async callRouter(model: string, prompt: string, signal?: AbortSignal): Promise<string> {
+  private async callRouter(model: string, prompt: string): Promise<string> {
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), ROUTER_TIMEOUT_MS)
-
-    // If an external signal is provided, abort our controller when it fires
-    const externalSignal = signal
-    if (externalSignal) {
-      externalSignal.addEventListener('abort', () => controller.abort())
-    }
 
     let response = ''
     try {
