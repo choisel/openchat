@@ -6,7 +6,7 @@
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
-    "build": "electron-vite build",
+    "build": "electron-vite build && tsc --project tsconfig.backend.json",
     "test": "vitest run"
   },
   "keywords": [],
