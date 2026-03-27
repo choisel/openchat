@@ -18,9 +18,29 @@ export function createConversationsRouter(db: Db): Router {
     const id = Number(req.params.id)
     const existing = db.getConversation(id)
     if (!existing) { res.status(404).json({ error: 'Not found' }); return }
-    const { name, model } = req.body
-    db.updateConversation(id, { name, model })
+    const { name, model, context_window, auto_compact_threshold, auto_compact_enabled } = req.body
+    db.updateConversation(id, { name, model, context_window, auto_compact_threshold, auto_compact_enabled })
     res.json(db.getConversation(id))
+  })
+
+  // promote must be registered before /:id/fork to avoid Express matching "promote" as an id
+  router.post('/promote', (req, res) => {
+    const { name = 'New conversation', model = 'auto', messages = [] } = req.body
+    const id = db.createConversation({ name, model })
+    for (const msg of messages as Array<{ role: 'user' | 'assistant'; content: string; tokens: number }>) {
+      db.addMessage({ conversationId: id, role: msg.role, content: msg.content, tokens: msg.tokens ?? 0 })
+    }
+    const conversation = db.getConversation(id)
+    res.status(201).json(conversation)
+  })
+
+  router.post('/:id/fork', (req, res) => {
+    const id = Number(req.params.id)
+    const { fromMessageId } = req.body
+    const existing = db.getConversation(id)
+    if (!existing) { res.status(404).json({ error: 'Not found' }); return }
+    const forked = db.forkConversation(id, fromMessageId)
+    res.status(201).json(forked)
   })
 
   router.delete('/:id', (req, res) => {

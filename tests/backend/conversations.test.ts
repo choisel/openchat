@@ -117,6 +117,61 @@ describe('conversations API', () => {
     expect(res.status).toBe(404)
   })
 
+  it('PATCH /api/conversations/:id updates context_window and auto_compact fields', async () => {
+    const create = await request(app)
+      .post('/api/conversations')
+      .send({ name: 'Chat', model: 'auto' })
+    const id = create.body.id
+    const res = await request(app)
+      .patch(`/api/conversations/${id}`)
+      .send({ name: 'renamed', context_window: 8192, auto_compact_enabled: 0 })
+    expect(res.status).toBe(200)
+    expect(res.body.name).toBe('renamed')
+    expect(res.body.context_window).toBe(8192)
+    expect(res.body.auto_compact_enabled).toBe(0)
+  })
+
+  it('POST /api/conversations/:id/fork creates a fork with messages up to fromMessageId', async () => {
+    const create = await request(app)
+      .post('/api/conversations')
+      .send({ name: 'Original', model: 'auto' })
+    const id = create.body.id
+    const m1 = db.addMessage({ conversationId: id, role: 'user', content: 'Hello', tokens: 5 })
+    const m2 = db.addMessage({ conversationId: id, role: 'assistant', content: 'Hi', tokens: 3 })
+    db.addMessage({ conversationId: id, role: 'user', content: 'Keep going', tokens: 4 })
+    const res = await request(app)
+      .post(`/api/conversations/${id}/fork`)
+      .send({ fromMessageId: m2 })
+    expect(res.status).toBe(201)
+    expect(res.body.id).not.toBe(id)
+    expect(res.body.name).toBe('Original (fork)')
+    const forkedMessages = db.getMessages(res.body.id)
+    expect(forkedMessages).toHaveLength(2)
+    expect(forkedMessages[0].content).toBe('Hello')
+    expect(forkedMessages[1].content).toBe('Hi')
+  })
+
+  it('POST /api/conversations/promote creates a persistent conversation with messages', async () => {
+    const res = await request(app)
+      .post('/api/conversations/promote')
+      .send({
+        name: 'Promoted chat',
+        model: 'phi-2',
+        messages: [
+          { role: 'user', content: 'First', tokens: 2 },
+          { role: 'assistant', content: 'Second', tokens: 3 },
+        ],
+      })
+    expect(res.status).toBe(201)
+    expect(res.body.id).toBeDefined()
+    expect(res.body.name).toBe('Promoted chat')
+    expect(res.body.model).toBe('phi-2')
+    const messages = db.getMessages(res.body.id)
+    expect(messages).toHaveLength(2)
+    expect(messages[0].content).toBe('First')
+    expect(messages[1].content).toBe('Second')
+  })
+
   it('updateMessageTokens corrects token count', async () => {
     const create = await request(app)
       .post('/api/conversations')
