@@ -188,6 +188,6 @@ describe('conversations API', () => {
     const msgId = db.addMessage({ conversationId: convId, role: 'assistant', content: 'Hello!', tokens: 0 })
     db.updateMessageTokens(msgId, 42)
     const messages = db.getMessages(convId)
-    expect(messages[0].tokens).toBe(42)
+    expect(messages[0].exact_tokens).toBe(42)
   })
 })

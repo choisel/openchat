@@ -138,7 +138,7 @@ export function createDb(dbPath: string): Db {
 
     getMessages(conversationId) {
       return db.prepare(
-        'SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC, id ASC'
+        'SELECT * FROM messages WHERE conversation_id = ? ORDER BY id ASC'
       ).all(conversationId) as Message[]
     },
 
@@ -200,7 +200,7 @@ export function createDb(dbPath: string): Db {
       const newId = result.lastInsertRowid as number
 
       const messages = db.prepare(
-        'SELECT * FROM messages WHERE conversation_id = ? AND id <= ? ORDER BY created_at ASC, id ASC'
+        'SELECT * FROM messages WHERE conversation_id = ? AND id <= ? ORDER BY id ASC'
       ).all(id, fromMessageId) as Message[]
 
       const insertMsg = db.prepare(

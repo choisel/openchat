@@ -102,7 +102,7 @@ describe('POST /api/chat/:conversationId SSE streaming', () => {
 
     const messages = db.getMessages(convId)
     const assistantMsg = messages.find(m => m.id === assistantMsgId)
-    expect(assistantMsg?.tokens).toBe(5)
+    expect(assistantMsg?.exact_tokens).toBe(5)
   })
 
   it('falls back to first loaded model when conversation model is "auto"', async () => {
