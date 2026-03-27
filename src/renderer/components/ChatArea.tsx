@@ -109,10 +109,11 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
       },
       (usage?: { prompt_tokens: number; completion_tokens: number }) => {
         const finalTokens = usage?.completion_tokens ?? estimateTokens(accumulated)
+        const exactTokens = usage?.completion_tokens
         setMessages(prev =>
           prev.map(m =>
             m.id === assistantMsg.id
-              ? { ...m, content: accumulated, tokens: finalTokens }
+              ? { ...m, content: accumulated, tokens: finalTokens, exact_tokens: exactTokens }
               : m
           )
         )
