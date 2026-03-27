@@ -125,6 +125,15 @@ export const api = {
     return res.json()
   },
 
+  async updateMessageTokens(conversationId: number, messageId: number, exact: number): Promise<void> {
+    const base = await getBaseUrl()
+    await fetch(`${base}/api/conversations/${conversationId}/messages/${messageId}/tokens`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ exact })
+    })
+  },
+
   async streamChat(
     conversationId: number,
     assistantMessageId: number,

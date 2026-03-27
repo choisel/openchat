@@ -64,6 +64,13 @@ export function createConversationsRouter(db: Db, lmClient: LmStudioClient): Rou
     res.status(201).json(message)
   })
 
+  router.patch('/:id/messages/:msgId/tokens', (req, res) => {
+    const { exact } = req.body
+    if (typeof exact !== 'number') { res.status(400).json({ error: 'exact must be a number' }); return }
+    db.updateMessageTokens(Number(req.params.msgId), exact)
+    res.status(204).send()
+  })
+
   router.post('/:id/compact', async (req, res) => {
     const conversationId = Number(req.params.id)
     const existing = db.getConversation(conversationId)

@@ -111,17 +111,29 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
         const finalTokens = usage?.completion_tokens ?? estimateTokens(accumulated)
         const exactTokens = usage?.completion_tokens
         setMessages(prev =>
-          prev.map(m =>
-            m.id === assistantMsg.id
-              ? { ...m, content: accumulated, tokens: finalTokens, exact_tokens: exactTokens }
-              : m
-          )
+          prev.map(m => {
+            if (m.id === assistantMsg.id) {
+              return { ...m, content: accumulated, tokens: finalTokens, exact_tokens: exactTokens }
+            }
+            if (usage && m.id === userMsg.id) {
+              return { ...m, exact_tokens: usage.prompt_tokens }
+            }
+            return m
+          })
         )
         setUsedTokens(baseTokens + finalTokens)
         setStreamingContent('')
         setStreamingAssistantId(null)
         setIsStreaming(false)
         setAbortController(null)
+        if (usage) {
+          api.updateMessageTokens(conversation.id, assistantMsg.id, usage.completion_tokens).catch(e =>
+            console.error('Failed to persist assistant token count:', e)
+          )
+          api.updateMessageTokens(conversation.id, userMsg.id, usage.prompt_tokens).catch(e =>
+            console.error('Failed to persist user token count:', e)
+          )
+        }
       },
       (message: string) => {
         setMessages(prev =>
