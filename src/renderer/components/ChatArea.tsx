@@ -99,7 +99,7 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
     let accumulated = ''
 
     try {
-    api.streamChat(
+    await api.streamChat(
       conversation.id,
       assistantMsg.id,
       (token: string) => {
