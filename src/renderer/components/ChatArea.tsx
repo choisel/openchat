@@ -3,6 +3,7 @@ import { api, type Conversation, type Message } from '../api-client'
 import { estimateTokens } from '../lib/tokens'
 import { TopBar } from './TopBar'
 import { MessageBubble } from './MessageBubble'
+import { CompactToast } from './CompactToast'
 
 interface ChatAreaProps {
   conversation: Conversation | null
@@ -24,8 +25,11 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
   const [streamingBaseTokens, setStreamingBaseTokens] = useState(0)
   const [inputText, setInputText] = useState('')
   const [compactState, setCompactState] = useState<CompactState>('idle')
+  const [autoCompactToastVisible, setAutoCompactToastVisible] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Prevents re-arming auto-compact within the same stream cycle after a cancel
+  const autoCompactArmedThisStream = useRef(false)
 
   async function runCompaction(convId: number) {
     setCompactState('running')
@@ -60,6 +64,8 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
   useEffect(() => {
     if (errorTimerRef.current) clearTimeout(errorTimerRef.current)
     setCompactState('idle')
+    setAutoCompactToastVisible(false)
+    autoCompactArmedThisStream.current = false
 
     if (!conversation) {
       setMessages([])
@@ -99,6 +105,11 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
 
   async function handleSend() {
     if (!inputText.trim() || isStreaming || !conversation) return
+
+    // Dismiss any pending auto-compact toast when a new message is sent
+    setAutoCompactToastVisible(false)
+    // Reset the arm guard so the next stream can trigger auto-compact if needed
+    autoCompactArmedThisStream.current = false
 
     const text = inputText
     setInputText('')
@@ -158,7 +169,8 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
             return m
           })
         )
-        setUsedTokens(baseTokens + finalTokens)
+        const totalUsed = baseTokens + finalTokens
+        setUsedTokens(totalUsed)
         setStreamingContent('')
         setStreamingAssistantId(null)
         setIsStreaming(false)
@@ -170,6 +182,17 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
           api.updateMessageTokens(conversation.id, userMsg.id, usage.prompt_tokens).catch(e =>
             console.error('Failed to persist user token count:', e)
           )
+        }
+        // Evaluate auto-compact threshold after stream completes
+        const threshold = conversation.auto_compact_threshold ?? 0.8
+        const autoEnabled = conversation.auto_compact_enabled === 1
+        if (
+          autoEnabled &&
+          !autoCompactArmedThisStream.current &&
+          contextWindow > 0 &&
+          totalUsed / contextWindow >= threshold
+        ) {
+          setAutoCompactToastVisible(true)
         }
         // Fire queued compaction after stream completes
         setCompactState(prev => {
@@ -231,6 +254,23 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
     }
   }
 
+  async function handleAutoCompactToggle() {
+    if (!conversation) return
+    const newValue = conversation.auto_compact_enabled === 1 ? 0 : 1
+    const updated = await api.updateConversation(conversation.id, { auto_compact_enabled: newValue })
+    onConversationUpdate(updated)
+  }
+
+  function handleAutoCompactToastCancel() {
+    setAutoCompactToastVisible(false)
+    autoCompactArmedThisStream.current = true
+  }
+
+  function handleAutoCompactToastExpire() {
+    setAutoCompactToastVisible(false)
+    runCompaction(conversation!.id)
+  }
+
   if (!conversation) {
     return (
       <div style={styles.empty}>
@@ -250,12 +290,14 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
         contextWindow={contextWindow}
         isStreaming={isStreaming}
         compactState={compactState}
+        autoCompactEnabled={conversation.auto_compact_enabled === 1}
         onModelChange={handleModelChange}
         onStop={handleStop}
         onNameChange={handleNameChange}
         onCompactRequest={() => handleCompactRequest(conversation.id)}
+        onAutoCompactToggle={handleAutoCompactToggle}
       />
-      <div style={styles.messages}>
+      <div style={{ ...styles.messages, position: 'relative' }}>
         {messages.map(msg => {
           const isStreamingMsg = isStreaming && msg.id === streamingAssistantId
           const displayContent = msg.id === streamingAssistantId ? streamingContent || msg.content : msg.content
@@ -275,6 +317,12 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
           )
         })}
         <div ref={messagesEndRef} />
+        {autoCompactToastVisible && (
+          <CompactToast
+            onExpire={handleAutoCompactToastExpire}
+            onCancel={handleAutoCompactToastCancel}
+          />
+        )}
       </div>
       <div style={styles.inputArea}>
         <textarea

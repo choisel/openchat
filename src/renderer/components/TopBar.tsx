@@ -14,10 +14,12 @@ interface Props {
   contextWindow: number
   isStreaming: boolean
   compactState: CompactState
+  autoCompactEnabled: boolean
   onModelChange: (model: string) => void
   onStop: () => void
   onNameChange: (name: string) => void
   onCompactRequest: () => void
+  onAutoCompactToggle: () => void
 }
 
 export function TopBar({
@@ -29,10 +31,12 @@ export function TopBar({
   contextWindow,
   isStreaming,
   compactState,
+  autoCompactEnabled,
   onModelChange,
   onStop,
   onNameChange,
   onCompactRequest,
+  onAutoCompactToggle,
 }: Props) {
   const [editing, setEditing] = useState(false)
   const [draftName, setDraftName] = useState(conversationName)
@@ -100,6 +104,16 @@ export function TopBar({
             title={compactState === 'queued' ? 'Click to cancel queued compaction' : 'Compact conversation context'}
           >
             {compactLabel()}
+          </button>
+          <button
+            style={{
+              ...styles.autoCompactToggleBtn,
+              ...(autoCompactEnabled ? styles.autoCompactToggleBtnOn : {}),
+            }}
+            onClick={onAutoCompactToggle}
+            title={autoCompactEnabled ? 'Auto-compact enabled — click to disable' : 'Auto-compact disabled — click to enable'}
+          >
+            Auto
           </button>
           {isStreaming && (
             <button style={styles.stopBtn} onClick={onStop}>
@@ -192,5 +206,18 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '4px 12px',
     fontSize: 13,
     cursor: 'pointer',
+  },
+  autoCompactToggleBtn: {
+    border: '1px solid #48484a',
+    background: 'transparent',
+    color: '#636366',
+    borderRadius: 12,
+    padding: '4px 12px',
+    fontSize: 13,
+    cursor: 'pointer',
+  },
+  autoCompactToggleBtnOn: {
+    borderColor: '#30d158',
+    color: '#30d158',
   },
 }
