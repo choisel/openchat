@@ -41,7 +41,7 @@ if (require.main === module) {
   const { createDb } = require('./db')
 
   const dbPath = process.env.DB_PATH ?? path.join(__dirname, '../../data/openchat.db')
-  const lmStudioUrl = process.env.LM_STUDIO_URL ?? 'http://localhost:1234'
+  const lmStudioUrl = process.env.LM_STUDIO_URL ?? 'http://127.0.0.1:1234'
   const port = Number(process.env.PORT ?? 0)
 
   const db = createDb(dbPath)

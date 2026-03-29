@@ -73,7 +73,7 @@ export function createChatRouter(client: LmStudioClient, db: Db, modelRouter: Mo
           return
         }
         model = await modelRouter.resolveModel(userMessageText, loadedModels)
-      } catch {
+      } catch (err) {
         res.status(503).json({ error: 'LM Studio unreachable' })
         return
       }
