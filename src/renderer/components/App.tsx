@@ -28,7 +28,7 @@ export function App() {
         })
     }
     fetchModels()
-    const interval = setInterval(fetchModels, 30_000)
+    const interval = setInterval(fetchModels, 10 * 60 * 1000)
     return () => clearInterval(interval)
   }, [])
 
