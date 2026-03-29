@@ -6,6 +6,23 @@ import { registerIpcHandlers } from './ipc-handlers'
 let mainWindow: BrowserWindow | null = null
 let spawner: BackendSpawner | null = null
 
+async function waitForVite(url: string, retries = 20, delayMs = 500): Promise<void> {
+  const { net } = await import('electron')
+  for (let i = 0; i < retries; i++) {
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const req = net.request(url)
+        req.on('response', () => resolve())
+        req.on('error', reject)
+        req.end()
+      })
+      return
+    } catch {
+      await new Promise(r => setTimeout(r, delayMs))
+    }
+  }
+}
+
 async function createWindow(backendPort: number) {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -21,6 +38,7 @@ async function createWindow(backendPort: number) {
   })
 
   if (process.env.NODE_ENV === 'development') {
+    await waitForVite('http://localhost:5173')
     mainWindow.loadURL('http://localhost:5173')
   } else {
     mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
