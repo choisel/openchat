@@ -25,9 +25,9 @@ export function Sidebar({ selectedId, selectedTempId, onSelect, onSelectTemp, on
   useEffect(() => {
     api.listConversations().then(setConversations).catch(console.error)
 
-    function pollStatus() {
+    function pollStatus(force = false) {
       const timeSinceActivity = Date.now() - getLastActivityAt()
-      if (timeSinceActivity < ACTIVITY_QUIET_PERIOD_MS) {
+      if (!force && timeSinceActivity < ACTIVITY_QUIET_PERIOD_MS) {
         // Recent LM Studio traffic — deduce status from that, skip explicit check
         console.log('[sidebar] skipping status poll — LM Studio active', Math.round(timeSinceActivity / 1000), 's ago')
         return
@@ -44,7 +44,7 @@ export function Sidebar({ selectedId, selectedTempId, onSelect, onSelectTemp, on
         })
     }
 
-    pollStatus()
+    pollStatus(true) // first poll always runs to initialize connected state
     const interval = setInterval(pollStatus, STATUS_POLL_INTERVAL_MS)
     return () => clearInterval(interval)
   }, [])

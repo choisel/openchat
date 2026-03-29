@@ -81,9 +81,11 @@ export function createChatRouter(client: LmStudioClient, db: Db, modelRouter: Mo
 
     // Build messages array from conversation history
     const dbMessages = db.getMessages(conversationId)
+    console.log('[chat] db messages:', dbMessages.map(m => `${m.id}:${m.role}(${m.content.slice(0, 30)})`))
     const messages = dbMessages
       .filter(m => m.content !== '')
       .map(m => ({ role: m.role, content: m.content }))
+    console.log('[chat] messages to LM Studio:', messages.map(m => `${m.role}(${m.content.slice(0, 30)})`))
 
     // SSE headers
     res.setHeader('Content-Type', 'text/event-stream')
@@ -91,10 +93,12 @@ export function createChatRouter(client: LmStudioClient, db: Db, modelRouter: Mo
     res.setHeader('Connection', 'keep-alive')
     res.flushHeaders()
 
-    // AbortController for client disconnect
+    // AbortController for client disconnect — only abort if response not yet finished
     const abortController = new AbortController()
     req.on('close', () => {
-      abortController.abort()
+      if (!res.writableEnded) {
+        abortController.abort()
+      }
     })
 
     function sendEvent(obj: Record<string, unknown>): void {
