@@ -28,8 +28,8 @@ export function createLmStudioRouter(client: LmStudioClient, db: Db, modelRouter
     try {
       const models = await client.listModels()
       res.json(models)
-    } catch (err) {
-      res.status(503).json({ error: 'LM Studio unreachable' })
+    } catch {
+      res.json([])
     }
   })
 

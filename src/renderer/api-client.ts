@@ -78,7 +78,9 @@ export const api = {
   async listModels(): Promise<LmModel[]> {
     const base = await getBaseUrl()
     const res = await fetch(`${base}/api/lmstudio/models`)
-    return res.json()
+    if (!res.ok) return []
+    const data = await res.json()
+    return Array.isArray(data) ? data : []
   },
 
   async getRoutingHealth(): Promise<{ consecutiveFailures: number }> {
