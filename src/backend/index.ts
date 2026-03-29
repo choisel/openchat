@@ -17,6 +17,14 @@ export function createApp({ db, lmStudioUrl, lmClient }: AppOptions) {
   const app = express()
   app.use(express.json())
 
+  // Allow renderer (Vite dev server or file://) to call the backend
+  app.use((_req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS')
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+    next()
+  })
+
   const resolvedClient = lmClient ?? createLmStudioClient(lmStudioUrl)
   const modelRouter = new ModelRouter(resolvedClient)
 
