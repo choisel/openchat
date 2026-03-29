@@ -1,5 +1,3 @@
-import { recordLmActivity } from './lmstudio-activity'
-
 declare global {
   interface Window {
     electronAPI: { getBackendPort: () => Promise<number> }
@@ -85,7 +83,6 @@ export const api = {
 
   async listModels(): Promise<LmModel[]> {
     const base = await getBaseUrl()
-    recordLmActivity()
     const res = await fetch(`${base}/api/lmstudio/models`)
     if (!res.ok) return []
     const data = await res.json()
@@ -184,7 +181,6 @@ export const api = {
     signal: AbortSignal
   ): Promise<void> {
     const base = await getBaseUrl()
-    recordLmActivity()
     console.log('[api] streamChat conv=%d assistantMsgId=%d', conversationId, assistantMessageId)
 
     const res = await fetch(`${base}/api/chat/${conversationId}`, {
