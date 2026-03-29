@@ -5,7 +5,7 @@
   "description": "Local LLM chat interface",
   "main": "out/main/index.js",
   "scripts": {
-    "dev": "electron-vite dev",
+    "dev": "tsc --project tsconfig.backend.json && concurrently -k \"tsc --project tsconfig.backend.json --watch --preserveWatchOutput\" \"electron-vite dev\"",
     "build": "electron-vite build && tsc --project tsconfig.backend.json",
     "test": "vitest run"
   },
@@ -20,6 +20,7 @@
     "@types/react-dom": "^19.2.3",
     "@types/supertest": "^7.2.0",
     "@vitejs/plugin-react": "^4.7.0",
+    "concurrently": "^9.2.1",
     "electron": "^29.4.6",
     "electron-builder": "^26.8.1",
     "electron-vite": "^5.0.0",
