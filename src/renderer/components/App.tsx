@@ -10,13 +10,22 @@ export function App() {
   const [selectedTemp, setSelectedTemp] = useState<TempSession | null>(null)
   const [lastForked, setLastForked] = useState<Conversation | null>(null)
   const [modelList, setModelList] = useState<LmModel[]>([])
+  const [lmConnected, setLmConnected] = useState(false)
   const [consecutiveFailures, setConsecutiveFailures] = useState(0)
   const [dismissed, setDismissed] = useState(false)
   const prevFailuresRef = useRef(0)
 
   useEffect(() => {
     function fetchModels() {
-      api.listModels().then(list => setModelList(list)).catch((err) => console.error('Failed to fetch models:', err))
+      api.listModels()
+        .then(list => {
+          setModelList(list)
+          setLmConnected(list.length > 0)
+        })
+        .catch((err) => {
+          console.error('Failed to fetch models:', err)
+          setLmConnected(false)
+        })
     }
     fetchModels()
     const interval = setInterval(fetchModels, 30_000)
@@ -90,6 +99,7 @@ export function App() {
         <Sidebar
           selectedId={selected?.id ?? null}
           selectedTempId={selectedTemp?.id ?? null}
+          lmConnected={lmConnected}
           onSelect={handleSelectConv}
           onSelectTemp={handleSelectTemp}
           onNew={handleNew}

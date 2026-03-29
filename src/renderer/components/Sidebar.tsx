@@ -1,14 +1,11 @@
 import { useEffect, useState } from 'react'
 import { api, type Conversation } from '../api-client'
 import { useTempSessions, tempSessionStore, type TempSession } from '../temp-session-store'
-import { getLastActivityAt } from '../lmstudio-activity'
-
-const STATUS_POLL_INTERVAL_MS = 10 * 60 * 1000 // 10 minutes
-const ACTIVITY_QUIET_PERIOD_MS = 10 * 60 * 1000 // suppress poll for 10 min after last LM activity
 
 interface Props {
   selectedId: number | null
   selectedTempId: string | null
+  lmConnected: boolean
   onSelect: (conv: Conversation) => void
   onSelectTemp: (session: TempSession) => void
   onNew: () => void
@@ -17,36 +14,12 @@ interface Props {
   prependConversation?: Conversation | null
 }
 
-export function Sidebar({ selectedId, selectedTempId, onSelect, onSelectTemp, onNew, onNewTemp, onPromote, prependConversation }: Props) {
+export function Sidebar({ selectedId, selectedTempId, lmConnected, onSelect, onSelectTemp, onNew, onNewTemp, onPromote, prependConversation }: Props) {
   const [conversations, setConversations] = useState<Conversation[]>([])
-  const [connected, setConnected] = useState(false)
   const [tempSessions] = useTempSessions()
 
   useEffect(() => {
     api.listConversations().then(setConversations).catch(console.error)
-
-    function pollStatus(force = false) {
-      const timeSinceActivity = Date.now() - getLastActivityAt()
-      if (!force && timeSinceActivity < ACTIVITY_QUIET_PERIOD_MS) {
-        // Recent LM Studio traffic — deduce status from that, skip explicit check
-        console.log('[sidebar] skipping status poll — LM Studio active', Math.round(timeSinceActivity / 1000), 's ago')
-        return
-      }
-      console.log('[sidebar] polling LM Studio status')
-      api.getLmStatus()
-        .then(s => {
-          console.log('[sidebar] LM Studio status:', s.connected ? 'connected' : 'offline')
-          setConnected(s.connected)
-        })
-        .catch(() => {
-          console.warn('[sidebar] LM Studio status check failed')
-          setConnected(false)
-        })
-    }
-
-    pollStatus(true) // first poll always runs to initialize connected state
-    const interval = setInterval(pollStatus, STATUS_POLL_INTERVAL_MS)
-    return () => clearInterval(interval)
   }, [])
 
   useEffect(() => {
@@ -112,9 +85,9 @@ export function Sidebar({ selectedId, selectedTempId, onSelect, onSelectTemp, on
         ))}
       </div>
       <div style={styles.footer}>
-        <div style={{ ...styles.status, color: connected ? '#32d74b' : '#ff453a' }}>
-          <span style={{ ...styles.dot, background: connected ? '#32d74b' : '#ff453a' }} />
-          {connected ? 'LM Studio connected' : 'LM Studio offline'}
+        <div style={{ ...styles.status, color: lmConnected ? '#32d74b' : '#ff453a' }}>
+          <span style={{ ...styles.dot, background: lmConnected ? '#32d74b' : '#ff453a' }} />
+          {lmConnected ? 'LM Studio connected' : 'LM Studio offline'}
         </div>
       </div>
     </aside>
