@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "tsc --project tsconfig.backend.json && concurrently -k \"tsc --project tsconfig.backend.json --watch --preserveWatchOutput\" \"electron-vite dev\"",
     "build": "electron-vite build && tsc --project tsconfig.backend.json",
+    "postinstall": "electron-rebuild -f -w better-sqlite3",
     "test": "vitest run"
   },
   "keywords": [],
