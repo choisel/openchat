@@ -43,6 +43,7 @@ export function App() {
 
   async function handleNew() {
     const conv = await api.createConversation('New conversation')
+    setLastForked(conv)
     setSelectedTemp(null)
     setSelected(conv)
   }

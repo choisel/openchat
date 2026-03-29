@@ -19,12 +19,13 @@ export function Sidebar({ selectedId, selectedTempId, onSelect, onSelectTemp, on
   const [tempSessions] = useTempSessions()
 
   useEffect(() => {
-    api.listConversations().then(setConversations)
-    api.getLmStatus().then(s => setConnected(s.connected))
+    api.listConversations().then(setConversations).catch(console.error)
 
-    const interval = setInterval(() => {
-      api.getLmStatus().then(s => setConnected(s.connected))
-    }, 30_000)
+    function pollStatus() {
+      api.getLmStatus().then(s => setConnected(s.connected)).catch(() => setConnected(false))
+    }
+    pollStatus()
+    const interval = setInterval(pollStatus, 5_000)
     return () => clearInterval(interval)
   }, [])
 
