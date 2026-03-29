@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react'
 import { api, type Conversation } from '../api-client'
 import { useTempSessions, tempSessionStore, type TempSession } from '../temp-session-store'
+import { getLastActivityAt } from '../lmstudio-activity'
+
+const STATUS_POLL_INTERVAL_MS = 10 * 60 * 1000 // 10 minutes
+const ACTIVITY_QUIET_PERIOD_MS = 10 * 60 * 1000 // suppress poll for 10 min after last LM activity
 
 interface Props {
   selectedId: number | null
@@ -22,10 +26,26 @@ export function Sidebar({ selectedId, selectedTempId, onSelect, onSelectTemp, on
     api.listConversations().then(setConversations).catch(console.error)
 
     function pollStatus() {
-      api.getLmStatus().then(s => setConnected(s.connected)).catch(() => setConnected(false))
+      const timeSinceActivity = Date.now() - getLastActivityAt()
+      if (timeSinceActivity < ACTIVITY_QUIET_PERIOD_MS) {
+        // Recent LM Studio traffic — deduce status from that, skip explicit check
+        console.log('[sidebar] skipping status poll — LM Studio active', Math.round(timeSinceActivity / 1000), 's ago')
+        return
+      }
+      console.log('[sidebar] polling LM Studio status')
+      api.getLmStatus()
+        .then(s => {
+          console.log('[sidebar] LM Studio status:', s.connected ? 'connected' : 'offline')
+          setConnected(s.connected)
+        })
+        .catch(() => {
+          console.warn('[sidebar] LM Studio status check failed')
+          setConnected(false)
+        })
     }
+
     pollStatus()
-    const interval = setInterval(pollStatus, 5_000)
+    const interval = setInterval(pollStatus, STATUS_POLL_INTERVAL_MS)
     return () => clearInterval(interval)
   }, [])
 

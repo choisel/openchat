@@ -1,3 +1,5 @@
+import { recordLmActivity } from './lmstudio-activity'
+
 declare global {
   interface Window {
     electronAPI: { getBackendPort: () => Promise<number> }
@@ -10,6 +12,7 @@ async function getBaseUrl(): Promise<string> {
   if (!baseUrl) {
     const port = await window.electronAPI.getBackendPort()
     baseUrl = `http://localhost:${port}`
+    console.log('[api] backend at', baseUrl)
   }
   return baseUrl
 }
@@ -55,18 +58,23 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, model })
     })
-    return res.json()
+    const conv = await res.json()
+    console.log('[api] created conversation', conv.id, conv.name)
+    return conv
   },
 
   async deleteConversation(id: number): Promise<void> {
     const base = await getBaseUrl()
     await fetch(`${base}/api/conversations/${id}`, { method: 'DELETE' })
+    console.log('[api] deleted conversation', id)
   },
 
   async getMessages(conversationId: number): Promise<Message[]> {
     const base = await getBaseUrl()
     const res = await fetch(`${base}/api/conversations/${conversationId}/messages`)
-    return res.json()
+    const msgs = await res.json()
+    console.log('[api] loaded', msgs.length, 'messages for conversation', conversationId)
+    return msgs
   },
 
   async getLmStatus(): Promise<{ connected: boolean }> {
@@ -77,10 +85,13 @@ export const api = {
 
   async listModels(): Promise<LmModel[]> {
     const base = await getBaseUrl()
+    recordLmActivity()
     const res = await fetch(`${base}/api/lmstudio/models`)
     if (!res.ok) return []
     const data = await res.json()
-    return Array.isArray(data) ? data : []
+    const models = Array.isArray(data) ? data : []
+    console.log('[api] models:', models.map((m: LmModel) => m.id))
+    return models
   },
 
   async getRoutingHealth(): Promise<{ consecutiveFailures: number }> {
@@ -173,6 +184,9 @@ export const api = {
     signal: AbortSignal
   ): Promise<void> {
     const base = await getBaseUrl()
+    recordLmActivity()
+    console.log('[api] streamChat conv=%d assistantMsgId=%d', conversationId, assistantMessageId)
+
     const res = await fetch(`${base}/api/chat/${conversationId}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -181,6 +195,7 @@ export const api = {
     })
 
     if (!res.body) {
+      console.error('[api] streamChat: no response body')
       onError('No response body')
       return
     }
@@ -188,6 +203,7 @@ export const api = {
     const reader = res.body.getReader()
     const decoder = new TextDecoder()
     let buffer = ''
+    let tokenCount = 0
 
     try {
       while (true) {
@@ -205,13 +221,17 @@ export const api = {
               try {
                 const event = JSON.parse(jsonStr)
                 if (event.type === 'token') {
-                  onToken(event.token)
+                  tokenCount++
+                  onToken(event.content)
                 } else if (event.type === 'done') {
+                  console.log('[api] streamChat done tokens=%d usage=%j', tokenCount, event.usage)
                   onDone(event.usage)
                 } else if (event.type === 'error') {
+                  console.error('[api] streamChat error from server:', event.message)
                   onError(event.message)
                 }
               } catch (e) {
+                console.error('[api] streamChat parse error:', jsonStr)
                 onError(`Failed to parse event: ${jsonStr}`)
               }
             }
@@ -220,7 +240,10 @@ export const api = {
       }
     } catch (e) {
       if (e instanceof Error && e.name !== 'AbortError') {
+        console.error('[api] streamChat fetch error:', e)
         onError(e.message)
+      } else {
+        console.log('[api] streamChat aborted by user')
       }
     } finally {
       reader.releaseLock()

@@ -22,13 +22,16 @@ export interface LmStudioClient {
 }
 
 export function createLmStudioClient(baseUrl: string): LmStudioClient {
+  console.log('[lmstudio] client configured with base URL:', baseUrl)
+
   async function fetchJson(path: string): Promise<unknown> {
     let response: Response
     try {
       response = await fetch(`${baseUrl}${path}`, {
         headers: { 'Content-Type': 'application/json' }
       })
-    } catch {
+    } catch (err) {
+      console.error('[lmstudio] network error on GET', path, err)
       throw new Error('LM Studio unreachable')
     }
     if (!response.ok) throw new Error(`LM Studio error: ${response.status}`)
@@ -37,15 +40,19 @@ export function createLmStudioClient(baseUrl: string): LmStudioClient {
 
   return {
     async listModels() {
+      console.log('[lmstudio] GET /v1/models')
       const data = await fetchJson('/v1/models') as { data: LmModel[] }
+      console.log('[lmstudio] models:', data.data.map(m => m.id))
       return data.data
     },
 
     async checkConnection() {
       try {
         await fetchJson('/v1/models')
+        console.log('[lmstudio] status: connected')
         return { connected: true }
       } catch {
+        console.log('[lmstudio] status: offline')
         return { connected: false }
       }
     },
@@ -59,43 +66,58 @@ export function createLmStudioClient(baseUrl: string): LmStudioClient {
             'Provide a concise summary of the conversation above, preserving all key information and decisions.'
         }
       ]
+      const payload = { model, messages: prompt, stream: false }
+      console.log('[lmstudio] POST /v1/chat/completions (summarize) model=%s messages=%d', model, prompt.length)
+      console.log('[lmstudio] summarize payload:', JSON.stringify(payload, null, 2))
+
       let response: Response
       try {
         response = await fetch(`${baseUrl}/v1/chat/completions`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model, messages: prompt, stream: false }),
+          body: JSON.stringify(payload),
           signal
         })
-      } catch {
+      } catch (err) {
+        console.error('[lmstudio] network error on summarize:', err)
         throw new Error('LM Studio unreachable')
       }
       if (!response.ok) throw new Error(`LM Studio error: ${response.status}`)
       const data = await response.json() as {
         choices: { message: { content: string } }[]
       }
+      console.log('[lmstudio] summarize response ok')
       return data.choices[0].message.content
     },
 
     async chatStream({ model, messages, onToken, signal }) {
+      const payload = { model, messages, stream: true }
+      console.log('[lmstudio] POST /v1/chat/completions (stream) model=%s messages=%d', model, messages.length)
+      console.log('[lmstudio] chat payload:', JSON.stringify(payload, null, 2))
+
       let response: Response
       try {
         response = await fetch(`${baseUrl}/v1/chat/completions`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model, messages, stream: true }),
+          body: JSON.stringify(payload),
           signal
         })
-      } catch {
+      } catch (err) {
+        console.error('[lmstudio] network error on chatStream:', err)
         throw new Error('LM Studio unreachable')
       }
 
-      if (!response.ok) throw new Error(`LM Studio error: ${response.status}`)
+      if (!response.ok) {
+        console.error('[lmstudio] chatStream HTTP error:', response.status)
+        throw new Error(`LM Studio error: ${response.status}`)
+      }
       if (!response.body) throw new Error('No response body')
 
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
       let usage: { prompt_tokens: number; completion_tokens: number } | undefined
+      let tokenCount = 0
 
       try {
         while (true) {
@@ -109,7 +131,10 @@ export function createLmStudioClient(baseUrl: string): LmStudioClient {
             try {
               const parsed = JSON.parse(trimmed)
               const token = parsed.choices?.[0]?.delta?.content
-              if (token) onToken(token)
+              if (token) {
+                tokenCount++
+                onToken(token)
+              }
               if (parsed.usage) usage = parsed.usage
             } catch {
               // malformed SSE line — skip
@@ -120,6 +145,7 @@ export function createLmStudioClient(baseUrl: string): LmStudioClient {
         reader.cancel()
       }
 
+      console.log('[lmstudio] chatStream complete tokens=%d usage=%j', tokenCount, usage)
       return { usage }
     }
   }
