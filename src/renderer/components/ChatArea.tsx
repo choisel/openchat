@@ -132,12 +132,6 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
   async function handleSend() {
     if (!inputText.trim() || isStreaming || isSendingRef.current || !conversation) return
 
-    isSendingRef.current = true
-    // Dismiss any pending auto-compact toast when a new message is sent
-    setAutoCompactToastVisible(false)
-    // Reset the arm guard so the next stream can trigger auto-compact if needed
-    autoCompactArmedThisStream.current = false
-
     // Web search pre-send
     let pendingSearchResults: SearchResult[] | null = null
     setSearchWarning(null)
@@ -153,6 +147,12 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
         }
       }
     }
+
+    isSendingRef.current = true
+    // Dismiss any pending auto-compact toast when a new message is sent
+    setAutoCompactToastVisible(false)
+    // Reset the arm guard so the next stream can trigger auto-compact if needed
+    autoCompactArmedThisStream.current = false
 
     const text = inputText
     setInputText('')

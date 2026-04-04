@@ -26,7 +26,7 @@ export function SourcesBlock({ results }: SourcesBlockProps) {
             <div key={i} style={styles.result}>
               <div
                 style={styles.resultTitle}
-                onClick={() => window.open(r.url, '_blank')}
+                onClick={() => window.electronAPI.openExternal(r.url)}
               >
                 {r.title}
               </div>
