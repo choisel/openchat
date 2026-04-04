@@ -189,6 +189,14 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
       return
     }
 
+    if (pendingSearchResults && pendingSearchResults.length > 0) {
+      setSearchResultsForMessageId(prev => {
+        const next = new Map(prev)
+        next.set(userMsg.id, pendingSearchResults!)
+        return next
+      })
+    }
+
     setMessages(prev => [...prev, userMsg, assistantMsg])
     setUsedTokens(prev => prev + estimatedUserTokens)
     setStreamingContent('')
@@ -416,16 +424,19 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
           const displayTokens = isStreamingMsg
             ? Math.ceil(streamingContent.length / 4)
             : msg.tokens
+          const sources = searchResultsForMessageId.get(msg.id)
           return (
-            <MessageBubble
-              key={msg.id}
-              role={msg.role}
-              content={displayContent}
-              tokens={displayTokens}
-              exact_tokens={isStreamingMsg ? undefined : msg.exact_tokens}
-              isStreaming={isStreamingMsg}
-              onFork={() => handleFork(msg.id)}
-            />
+            <div key={msg.id}>
+              {sources && <SourcesBlock results={sources} />}
+              <MessageBubble
+                role={msg.role}
+                content={displayContent}
+                tokens={displayTokens}
+                exact_tokens={isStreamingMsg ? undefined : msg.exact_tokens}
+                isStreaming={isStreamingMsg}
+                onFork={() => handleFork(msg.id)}
+              />
+            </div>
           )
         })}
         <div ref={messagesEndRef} />
@@ -449,26 +460,43 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
         </div>
       )}
       <div style={styles.inputArea}>
-        <textarea
-          value={inputText}
-          onChange={e => setInputText(e.target.value)}
-          onKeyDown={e => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault()
-              handleSend()
-            }
-          }}
-          placeholder="Message..."
-          disabled={isStreaming}
-          style={styles.textarea}
-        />
-        <button
-          onClick={handleSend}
-          disabled={isStreaming || !inputText.trim()}
-          style={styles.sendBtn}
-        >
-          ↑
-        </button>
+        <div style={styles.inputToolbar}>
+          <button
+            onClick={() => setWebSearchActive(a => !a)}
+            title={webSearchActive ? 'Disable web search' : 'Enable web search for next message'}
+            style={{
+              ...styles.toolbarBtn,
+              ...(webSearchActive ? styles.toolbarBtnActive : {})
+            }}
+          >
+            🌐
+          </button>
+        </div>
+        {searchWarning && (
+          <div style={styles.searchWarning}>{searchWarning}</div>
+        )}
+        <div style={styles.inputRow}>
+          <textarea
+            value={inputText}
+            onChange={e => setInputText(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                handleSend()
+              }
+            }}
+            placeholder="Message..."
+            disabled={isStreaming}
+            style={styles.textarea}
+          />
+          <button
+            onClick={handleSend}
+            disabled={isStreaming || !inputText.trim()}
+            style={styles.sendBtn}
+          >
+            ↑
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -501,6 +529,10 @@ const styles: Record<string, React.CSSProperties> = {
   inputArea: {
     padding: '16px',
     borderTop: '1px solid #3a3a3c',
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  inputRow: {
     display: 'flex',
     gap: 8,
     alignItems: 'flex-end',
@@ -540,5 +572,20 @@ const styles: Record<string, React.CSSProperties> = {
   attachmentRow: {
     display: 'flex', flexWrap: 'wrap', gap: 6,
     padding: '0 16px 8px',
+  },
+  inputToolbar: {
+    display: 'flex', gap: 4, marginBottom: 6,
+  },
+  toolbarBtn: {
+    background: 'none', border: '1px solid #3a3a3c',
+    borderRadius: 6, color: '#8e8e93', cursor: 'pointer',
+    fontSize: 14, padding: '3px 8px',
+  },
+  toolbarBtnActive: {
+    background: '#0a84ff22', border: '1px solid #0a84ff',
+    color: '#0a84ff',
+  },
+  searchWarning: {
+    color: '#ff9f0a', fontSize: 11, marginBottom: 4,
   },
 }
