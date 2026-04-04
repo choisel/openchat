@@ -6,6 +6,8 @@ import { MessageBubble } from './MessageBubble'
 import { CompactToast } from './CompactToast'
 import { AttachmentChip } from './AttachmentChip'
 import type { AttachmentData } from '../api-client'
+import { SourcesBlock } from './SourcesBlock'
+import type { SearchResult } from './SourcesBlock'
 
 interface ChatAreaProps {
   conversation: Conversation | null
@@ -37,6 +39,10 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
 
   const [attachments, setAttachments] = useState<AttachmentData[]>([])
   const [isDragging, setIsDragging] = useState(false)
+
+  const [webSearchActive, setWebSearchActive] = useState(false)
+  const [searchResultsForMessageId, setSearchResultsForMessageId] = useState<Map<number, SearchResult[]>>(new Map())
+  const [searchWarning, setSearchWarning] = useState<string | null>(null)
 
   function isVisionModel(model: string): boolean {
     return /vision|llava|bakllava|moondream/i.test(model)
@@ -79,6 +85,9 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
     autoCompactArmedThisStream.current = false
     setAttachments([])
     setIsDragging(false)
+    setSearchResultsForMessageId(new Map())
+    setWebSearchActive(false)
+    setSearchWarning(null)
     isSendingRef.current = false
     activeAbortControllerRef.current?.abort()
     activeAbortControllerRef.current = null
@@ -129,15 +138,47 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
     // Reset the arm guard so the next stream can trigger auto-compact if needed
     autoCompactArmedThisStream.current = false
 
+    // Web search pre-send
+    let pendingSearchResults: SearchResult[] | null = null
+    setSearchWarning(null)
+
+    if (webSearchActive && inputText.trim()) {
+      try {
+        pendingSearchResults = await api.search(inputText.trim())
+      } catch (err: any) {
+        if (err.message?.includes('not configured')) {
+          setSearchWarning('Web search not configured — add API keys in Settings')
+        } else {
+          setSearchWarning('Web search failed — sending without search results')
+        }
+      }
+    }
+
     const text = inputText
     setInputText('')
 
-    const estimatedUserTokens = estimateTokens(text)
+    // Build enriched text with file content injected
+    let enrichedText = text
+
+    for (const att of attachments) {
+      if (att.type === 'text') {
+        enrichedText = `\`\`\`${att.language}\n// ${att.filename}\n${att.content}\n\`\`\`\n\n${enrichedText}`
+      } else if (att.type === 'pdf') {
+        enrichedText = `[PDF: ${att.filename}]\n${att.content}\n\n${enrichedText}`
+      } else if (att.type === 'pdf-unreadable') {
+        enrichedText = `[PDF: ${att.filename} — could not extract text]\n\n${enrichedText}`
+      }
+      // images: handled as dataUrl in attachment chips; skipped in text for now
+    }
+
+    setAttachments([])
+
+    const estimatedUserTokens = estimateTokens(enrichedText)
 
     let userMsg, assistantMsg
     try {
       // Create user message on backend
-      userMsg = await api.sendMessage(conversation.id, 'user', text, estimatedUserTokens)
+      userMsg = await api.sendMessage(conversation.id, 'user', enrichedText, estimatedUserTokens)
 
       // Pre-create empty assistant message
       assistantMsg = await api.sendMessage(conversation.id, 'assistant', '', 0)

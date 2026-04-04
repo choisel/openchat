@@ -5,12 +5,16 @@ export interface LmModel {
   context_length?: number
 }
 
+export type MessageContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } }
+
 export interface LmStudioClient {
   listModels: () => Promise<LmModel[]>
   checkConnection: () => Promise<{ connected: boolean }>
   chatStream: (args: {
     model: string
-    messages: { role: string; content: string }[]
+    messages: Array<{ role: string; content: string | MessageContentPart[] }>
     onToken: (token: string) => void
     signal?: AbortSignal
   }) => Promise<{ usage?: { prompt_tokens: number; completion_tokens: number } }>

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { FileBlock } from './FileBlock'
 
 interface Props {
   role: 'user' | 'assistant'
@@ -8,6 +9,33 @@ interface Props {
   modelName?: string
   isStreaming?: boolean
   onFork?: () => void
+}
+
+function parseContentBlocks(content: string): Array<
+  | { type: 'text'; text: string }
+  | { type: 'code'; language: string; filename: string; code: string }
+> {
+  const blocks: Array<{ type: 'text'; text: string } | { type: 'code'; language: string; filename: string; code: string }> = []
+  const regex = /```(\w+)?\n(?:\/\/ (.+)\n)?([\s\S]*?)```/g
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+
+  while ((match = regex.exec(content)) !== null) {
+    if (match.index > lastIndex) {
+      blocks.push({ type: 'text', text: content.slice(lastIndex, match.index) })
+    }
+    blocks.push({
+      type: 'code',
+      language: match[1] ?? 'plaintext',
+      filename: match[2] ?? `snippet.${match[1] ?? 'txt'}`,
+      code: match[3] ?? ''
+    })
+    lastIndex = regex.lastIndex
+  }
+  if (lastIndex < content.length) {
+    blocks.push({ type: 'text', text: content.slice(lastIndex) })
+  }
+  return blocks
 }
 
 export function MessageBubble({ role, content, tokens, exact_tokens, modelName, isStreaming, onFork }: Props) {
@@ -25,10 +53,20 @@ export function MessageBubble({ role, content, tokens, exact_tokens, modelName, 
         <span style={styles.modelLabel}>{modelName}</span>
       )}
       <div style={isUser ? styles.bubbleUser : styles.bubbleAssistant}>
-        <span style={styles.content}>
-          {content}
-          {isStreaming && <span className="streaming-cursor">▋</span>}
-        </span>
+        {isUser ? (
+          <span style={styles.content}>
+            {parseContentBlocks(content).map((block, i) =>
+              block.type === 'code'
+                ? <FileBlock key={i} filename={block.filename} language={block.language} content={block.code} />
+                : <span key={i} style={{ whiteSpace: 'pre-wrap' }}>{block.text}</span>
+            )}
+          </span>
+        ) : (
+          <span style={styles.content}>
+            {content}
+            {isStreaming && <span className="streaming-cursor">▋</span>}
+          </span>
+        )}
       </div>
       <div style={styles.metaRow}>
         <span style={styles.tokenAnnotation}>{displayTokens} tokens</span>
