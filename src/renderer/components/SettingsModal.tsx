@@ -11,11 +11,14 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
+    let active = true
     api.getSettings().then(s => {
+      if (!active) return
       setBraveKey(s['brave_api_key'] ?? '')
       setTavilyKey(s['tavily_api_key'] ?? '')
       setLoaded(true)
     }).catch(console.error)
+    return () => { active = false }
   }, [])
 
   function handleBlur(key: string, value: string) {

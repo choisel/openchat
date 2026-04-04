@@ -181,16 +181,18 @@ export const api = {
   async getSettings(): Promise<Record<string, string | null>> {
     const base = await getBaseUrl()
     const res = await fetch(`${base}/api/settings`)
+    if (!res.ok) throw new Error(`Failed to load settings: ${res.status}`)
     return res.json()
   },
 
   async setSetting(key: string, value: string): Promise<void> {
     const base = await getBaseUrl()
-    await fetch(`${base}/api/settings/${key}`, {
+    const res = await fetch(`${base}/api/settings/${key}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ value })
     })
+    if (!res.ok) throw new Error(`Failed to save setting: ${res.status}`)
   },
 
   async search(query: string): Promise<Array<{ title: string; url: string; snippet: string }>> {
