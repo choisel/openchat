@@ -4,6 +4,8 @@ import { estimateTokens } from '../lib/tokens'
 import { TopBar } from './TopBar'
 import { MessageBubble } from './MessageBubble'
 import { CompactToast } from './CompactToast'
+import { AttachmentChip } from './AttachmentChip'
+import type { AttachmentData } from '../api-client'
 
 interface ChatAreaProps {
   conversation: Conversation | null
@@ -32,6 +34,13 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
   const activeAbortControllerRef = useRef<AbortController | null>(null)
   // Prevents re-arming auto-compact within the same stream cycle after a cancel
   const autoCompactArmedThisStream = useRef(false)
+
+  const [attachments, setAttachments] = useState<AttachmentData[]>([])
+  const [isDragging, setIsDragging] = useState(false)
+
+  function isVisionModel(model: string): boolean {
+    return /vision|llava|bakllava|moondream/i.test(model)
+  }
 
   async function runCompaction(convId: number) {
     setCompactState('running')
@@ -68,6 +77,8 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
     setCompactState('idle')
     setAutoCompactToastVisible(false)
     autoCompactArmedThisStream.current = false
+    setAttachments([])
+    setIsDragging(false)
     isSendingRef.current = false
     activeAbortControllerRef.current?.abort()
     activeAbortControllerRef.current = null
@@ -291,6 +302,35 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
     if (conversation) runCompaction(conversation.id)
   }
 
+  function handleDragEnter(e: React.DragEvent) {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  function handleDragLeave(e: React.DragEvent) {
+    e.preventDefault()
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setIsDragging(false)
+    }
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault()
+  }
+
+  async function handleDrop(e: React.DragEvent) {
+    e.preventDefault()
+    setIsDragging(false)
+    const files = Array.from(e.dataTransfer.files)
+    if (files.length === 0) return
+    try {
+      const results = await api.processFiles(files)
+      setAttachments(prev => [...prev, ...results])
+    } catch (err) {
+      console.error('File processing failed:', err)
+    }
+  }
+
   if (!conversation) {
     return (
       <div style={styles.empty}>
@@ -300,7 +340,18 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
   }
 
   return (
-    <div style={styles.container}>
+    <div
+      style={{ ...styles.container, position: 'relative' }}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
+      {isDragging && (
+        <div style={styles.dropOverlay}>
+          <span style={styles.dropLabel}>Drop files here</span>
+        </div>
+      )}
       <TopBar
         conversationId={conversation.id}
         conversationName={conversation.name}
@@ -344,6 +395,18 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
           />
         )}
       </div>
+      {attachments.length > 0 && (
+        <div style={styles.attachmentRow}>
+          {attachments.map((att, i) => (
+            <AttachmentChip
+              key={i}
+              attachment={att}
+              onRemove={() => setAttachments(prev => prev.filter((_, j) => j !== i))}
+              isVisionWarning={att.type === 'image' && !isVisionModel(conversation.model)}
+            />
+          ))}
+        </div>
+      )}
       <div style={styles.inputArea}>
         <textarea
           value={inputText}
@@ -424,5 +487,17 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     fontSize: 16,
     flexShrink: 0,
+  },
+  dropOverlay: {
+    position: 'absolute', inset: 0, zIndex: 50,
+    background: 'rgba(10, 132, 255, 0.12)',
+    border: '2px dashed #0a84ff',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    pointerEvents: 'none',
+  },
+  dropLabel: { color: '#0a84ff', fontSize: 18, fontWeight: 600 },
+  attachmentRow: {
+    display: 'flex', flexWrap: 'wrap', gap: 6,
+    padding: '0 16px 8px',
   },
 }
