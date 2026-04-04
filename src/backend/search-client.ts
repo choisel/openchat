@@ -46,8 +46,11 @@ export function createSearchClient({ braveKey, tavilyKey }: SearchClientOptions)
         try {
           const res = await fetch('https://api.tavily.com/search', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ api_key: tavilyKey, query, max_results: 5 })
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${tavilyKey}`
+            },
+            body: JSON.stringify({ query, max_results: 5 })
           })
           if (res.ok) {
             const data = await res.json() as { results?: Array<{ title: string; url: string; content?: string }> }
