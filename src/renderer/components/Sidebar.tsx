@@ -12,9 +12,10 @@ interface Props {
   onNewTemp: () => void
   onPromote: (tempId: string, conv: Conversation) => void
   prependConversation?: Conversation | null
+  onOpenSettings?: () => void
 }
 
-export function Sidebar({ selectedId, selectedTempId, lmConnected, onSelect, onSelectTemp, onNew, onNewTemp, onPromote, prependConversation }: Props) {
+export function Sidebar({ selectedId, selectedTempId, lmConnected, onSelect, onSelectTemp, onNew, onNewTemp, onPromote, prependConversation, onOpenSettings }: Props) {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [tempSessions] = useTempSessions()
 
@@ -89,6 +90,9 @@ export function Sidebar({ selectedId, selectedTempId, lmConnected, onSelect, onS
           <span style={{ ...styles.dot, background: lmConnected ? '#32d74b' : '#ff453a' }} />
           {lmConnected ? 'LM Studio connected' : 'LM Studio offline'}
         </div>
+        {onOpenSettings && (
+          <button style={styles.settingsBtn} onClick={onOpenSettings} title="Settings">⚙</button>
+        )}
       </div>
     </aside>
   )
@@ -108,7 +112,8 @@ const styles: Record<string, React.CSSProperties> = {
   itemActive: { background: '#2c2c2e', color: '#e5e5ea' },
   tempLabel: { flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   saveBtn: { flexShrink: 0, marginLeft: 4, background: 'transparent', border: '1px solid #3a3a3c', borderRadius: 4, color: '#636366', fontSize: 10, cursor: 'pointer', padding: '2px 5px' },
-  footer: { padding: 12, borderTop: '1px solid #2c2c2e' },
+  footer: { padding: 12, borderTop: '1px solid #2c2c2e', display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
+  settingsBtn: { background: 'none', border: 'none', color: '#8e8e93', cursor: 'pointer', fontSize: 16, padding: '0 2px' },
   status: { fontSize: 11, display: 'flex', alignItems: 'center', gap: 6 },
   dot: { width: 6, height: 6, borderRadius: '50%', display: 'inline-block' }
 }

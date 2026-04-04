@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Sidebar } from './Sidebar'
 import { ChatArea } from './ChatArea'
 import { RoutingWarningBanner } from './RoutingWarningBanner'
+import { SettingsModal } from './SettingsModal'
 import { api, type Conversation, type LmModel } from '../api-client'
 import { tempSessionStore, type TempSession } from '../temp-session-store'
 
@@ -13,6 +14,7 @@ export function App() {
   const [lmConnected, setLmConnected] = useState(false)
   const [consecutiveFailures, setConsecutiveFailures] = useState(0)
   const [dismissed, setDismissed] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const prevFailuresRef = useRef(0)
 
   useEffect(() => {
@@ -106,6 +108,7 @@ export function App() {
           onNewTemp={handleNewTemp}
           onPromote={handlePromote}
           prependConversation={lastForked}
+          onOpenSettings={() => setSettingsOpen(true)}
         />
         <ChatArea
           conversation={selected}
@@ -115,6 +118,7 @@ export function App() {
           onFork={handleFork}
         />
       </div>
+      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
     </div>
   )
 }

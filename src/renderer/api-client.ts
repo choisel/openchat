@@ -42,6 +42,12 @@ export interface Message {
   created_at: string
 }
 
+export type AttachmentData =
+  | { type: 'text'; language: string; content: string; filename: string }
+  | { type: 'pdf'; content: string; filename: string }
+  | { type: 'pdf-unreadable'; filename: string }
+  | { type: 'image'; dataUrl: string; mimeType: string; filename: string }
+
 export const api = {
   async listConversations(): Promise<Conversation[]> {
     const base = await getBaseUrl()
@@ -169,6 +175,44 @@ export const api = {
     if (!res.ok) {
       throw new Error(`Compaction failed: ${res.status}`)
     }
+    return res.json()
+  },
+
+  async getSettings(): Promise<Record<string, string | null>> {
+    const base = await getBaseUrl()
+    const res = await fetch(`${base}/api/settings`)
+    return res.json()
+  },
+
+  async setSetting(key: string, value: string): Promise<void> {
+    const base = await getBaseUrl()
+    await fetch(`${base}/api/settings/${key}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ value })
+    })
+  },
+
+  async search(query: string): Promise<Array<{ title: string; url: string; snippet: string }>> {
+    const base = await getBaseUrl()
+    const res = await fetch(`${base}/api/search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query })
+    })
+    if (!res.ok) {
+      if (res.status === 503) throw new Error('Web search not configured')
+      throw new Error(`Search failed: ${res.status}`)
+    }
+    return res.json()
+  },
+
+  async processFiles(files: File[]): Promise<AttachmentData[]> {
+    const base = await getBaseUrl()
+    const form = new FormData()
+    for (const f of files) form.append('files', f)
+    const res = await fetch(`${base}/api/files/process`, { method: 'POST', body: form })
+    if (!res.ok) throw new Error(`File processing failed: ${res.status}`)
     return res.json()
   },
 
