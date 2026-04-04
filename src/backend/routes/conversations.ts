@@ -86,7 +86,26 @@ export function createConversationsRouter(db: Db, lmClient: LmStudioClient): Rou
       return
     }
 
-    const model = existing.model
+    let model = existing.model
+    if (model === 'auto') {
+      try {
+        const loadedModels = await lmClient.listModels()
+        if (loadedModels.length === 0) {
+          res.status(503).json({ error: 'No models loaded' })
+          return
+        }
+        // Simplified auto-selection for summary: use the largest model
+        const sorted = [...loadedModels].sort((a, b) => {
+          const { parseParamCount } = require('../model-param-parser')
+          return parseParamCount(b.id) - parseParamCount(a.id)
+        })
+        model = sorted[0].id
+      } catch {
+        res.status(503).json({ error: 'LM Studio unreachable' })
+        return
+      }
+    }
+
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), 30_000)
 
@@ -94,9 +113,10 @@ export function createConversationsRouter(db: Db, lmClient: LmStudioClient): Rou
     try {
       const promptMessages = toSummarize.map(m => ({ role: m.role, content: m.content }))
       summary = await lmClient.summarize(promptMessages, model, controller.signal)
-    } catch {
+    } catch (err: any) {
+      console.error('[compact] summarization failed:', err)
       clearTimeout(timer)
-      res.status(422).json({ error: 'compaction_failed' })
+      res.status(422).json({ error: 'compaction_failed', details: err.message })
       return
     }
     clearTimeout(timer)

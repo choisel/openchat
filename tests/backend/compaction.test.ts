@@ -92,7 +92,10 @@ describe('POST /api/conversations/:id/compact', () => {
       .send({ keep: 4 })
 
     expect(res.status).toBe(422)
-    expect(res.body).toEqual({ error: 'compaction_failed' })
+    expect(res.body).toEqual({
+      error: 'compaction_failed',
+      details: res.body.details
+    })
 
     // DB unchanged
     const messagesAfter = db.getMessages(convId)
@@ -120,7 +123,10 @@ describe('POST /api/conversations/:id/compact', () => {
       .send({ keep: 4 })
 
     expect(res.status).toBe(422)
-    expect(res.body).toEqual({ error: 'compaction_failed' })
+    expect(res.body).toEqual({
+      error: 'compaction_failed',
+      details: res.body.details
+    })
 
     // DB unchanged
     const messagesAfter = db.getMessages(convId)

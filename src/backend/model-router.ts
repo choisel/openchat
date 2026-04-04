@@ -123,7 +123,8 @@ export class ModelRouter {
         onToken: (token) => { response += token },
         signal: controller.signal
       })
-    } catch {
+    } catch (err) {
+      console.warn('[model-router] call to LM Studio failed for model %s:', model, err)
       // Timeout or network error — return empty string to trigger fallback
       return ''
     } finally {
@@ -134,10 +135,11 @@ export class ModelRouter {
   }
 }
 
-function buildTwoModelPrompt(modelA: string, modelB: string, _userMessage: string): string {
+function buildTwoModelPrompt(modelA: string, modelB: string, userMessage: string): string {
   return (
     `You are a model router. Choose one of the two models below that best fits the user's request.\n` +
     `Respond with ONLY the exact model name, nothing else.\n\n` +
+    `User request: "${userMessage}"\n\n` +
     `Models:\n- ${modelA}\n- ${modelB}`
   )
 }

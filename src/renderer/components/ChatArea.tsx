@@ -28,6 +28,8 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
   const [autoCompactToastVisible, setAutoCompactToastVisible] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isSendingRef = useRef(false)
+  const activeAbortControllerRef = useRef<AbortController | null>(null)
   // Prevents re-arming auto-compact within the same stream cycle after a cancel
   const autoCompactArmedThisStream = useRef(false)
 
@@ -66,6 +68,9 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
     setCompactState('idle')
     setAutoCompactToastVisible(false)
     autoCompactArmedThisStream.current = false
+    isSendingRef.current = false
+    activeAbortControllerRef.current?.abort()
+    activeAbortControllerRef.current = null
 
     if (!conversation) {
       setMessages([])
@@ -99,20 +104,15 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
   // Abort any in-flight stream when the component unmounts
   useEffect(() => {
     return () => {
-      abortController?.abort()
-    }
-  }, [abortController])
-
-  // Cleanup error timer on unmount to prevent setState after unmount
-  useEffect(() => {
-    return () => {
+      activeAbortControllerRef.current?.abort()
       if (errorTimerRef.current) clearTimeout(errorTimerRef.current)
     }
   }, [])
 
   async function handleSend() {
-    if (!inputText.trim() || isStreaming || !conversation) return
+    if (!inputText.trim() || isStreaming || isSendingRef.current || !conversation) return
 
+    isSendingRef.current = true
     // Dismiss any pending auto-compact toast when a new message is sent
     setAutoCompactToastVisible(false)
     // Reset the arm guard so the next stream can trigger auto-compact if needed
@@ -133,6 +133,7 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
     } catch (err) {
       console.error('Failed to create messages:', err)
       setInputText(text)
+      isSendingRef.current = false
       return
     }
 
@@ -143,6 +144,7 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
     setIsStreaming(true)
 
     const controller = new AbortController()
+    activeAbortControllerRef.current = controller
     setAbortController(controller)
 
     // Capture base token count before streaming (user msg + previous messages)
@@ -154,91 +156,98 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
     let accumulated = ''
 
     try {
-    await api.streamChat(
-      conversation.id,
-      assistantMsg.id,
-      (token: string) => {
-        accumulated += token
-        setStreamingContent(accumulated)
-        setUsedTokens(baseTokens + estimateTokens(accumulated))
-      },
-      (usage?: { prompt_tokens: number; completion_tokens: number }) => {
-        const finalTokens = usage?.completion_tokens ?? estimateTokens(accumulated)
-        const exactTokens = usage?.completion_tokens
-        setMessages(prev =>
-          prev.map(m => {
-            if (m.id === assistantMsg.id) {
-              return { ...m, content: accumulated, tokens: finalTokens, exact_tokens: exactTokens }
-            }
-            if (usage && m.id === userMsg.id) {
-              return { ...m, exact_tokens: usage.prompt_tokens }
-            }
-            return m
-          })
-        )
-        const totalUsed = baseTokens + finalTokens
-        setUsedTokens(totalUsed)
-        setStreamingContent('')
-        setStreamingAssistantId(null)
-        setIsStreaming(false)
-        setAbortController(null)
-        if (usage) {
-          api.updateMessageTokens(conversation.id, assistantMsg.id, usage.completion_tokens).catch(e =>
-            console.error('Failed to persist assistant token count:', e)
+      await api.streamChat(
+        conversation.id,
+        assistantMsg.id,
+        (token: string) => {
+          accumulated += token
+          setStreamingContent(accumulated)
+          setUsedTokens(baseTokens + estimateTokens(accumulated))
+        },
+        (usage?: { prompt_tokens: number; completion_tokens: number }) => {
+          const finalTokens = usage?.completion_tokens ?? estimateTokens(accumulated)
+          const exactTokens = usage?.completion_tokens
+          setMessages(prev =>
+            prev.map(m => {
+              if (m.id === assistantMsg!.id) {
+                return { ...m, content: accumulated, tokens: finalTokens, exact_tokens: exactTokens }
+              }
+              if (usage && m.id === userMsg!.id) {
+                return { ...m, exact_tokens: usage.prompt_tokens }
+              }
+              return m
+            })
           )
-          api.updateMessageTokens(conversation.id, userMsg.id, usage.prompt_tokens).catch(e =>
-            console.error('Failed to persist user token count:', e)
-          )
-        }
-        // Evaluate auto-compact threshold after stream completes
-        const threshold = conversation.auto_compact_threshold ?? 0.8
-        const autoEnabled = conversation.auto_compact_enabled === 1
-        if (
-          autoEnabled &&
-          !autoCompactArmedThisStream.current &&
-          contextWindow > 0 &&
-          totalUsed / contextWindow >= threshold
-        ) {
-          setAutoCompactToastVisible(true)
-        }
-        // Fire queued compaction after stream completes
-        setCompactState(prev => {
-          if (prev === 'queued') {
-            runCompaction(conversation.id)
-            return 'running'
+          const totalUsed = baseTokens + finalTokens
+          setUsedTokens(totalUsed)
+          setStreamingContent('')
+          setStreamingAssistantId(null)
+          setIsStreaming(false)
+          setAbortController(null)
+          activeAbortControllerRef.current = null
+          isSendingRef.current = false
+          if (usage) {
+            api.updateMessageTokens(conversation.id, assistantMsg!.id, usage.completion_tokens).catch(e =>
+              console.error('Failed to persist assistant token count:', e)
+            )
+            api.updateMessageTokens(conversation.id, userMsg!.id, usage.prompt_tokens).catch(e =>
+              console.error('Failed to persist user token count:', e)
+            )
           }
-          return prev
-        })
-      },
-      (message: string) => {
-        setMessages(prev =>
-          prev.map(m =>
-            m.id === assistantMsg.id
-              ? { ...m, content: `[Error: ${message}]`, tokens: 0 }
-              : m
+          // Evaluate auto-compact threshold after stream completes
+          const threshold = conversation.auto_compact_threshold ?? 0.8
+          const autoEnabled = conversation.auto_compact_enabled === 1
+          if (
+            autoEnabled &&
+            !autoCompactArmedThisStream.current &&
+            contextWindow > 0 &&
+            totalUsed / contextWindow >= threshold
+          ) {
+            setAutoCompactToastVisible(true)
+          }
+          // Fire queued compaction after stream completes
+          setCompactState(prev => {
+            if (prev === 'queued') {
+              runCompaction(conversation.id)
+              return 'running'
+            }
+            return prev
+          })
+        },
+        (message: string) => {
+          setMessages(prev =>
+            prev.map(m =>
+              m.id === assistantMsg!.id
+                ? { ...m, content: `[Error: ${message}]`, tokens: 0 }
+                : m
+            )
           )
-        )
-        setStreamingContent('')
-        setStreamingAssistantId(null)
-        setIsStreaming(false)
-        setAbortController(null)
-      },
-      controller.signal
-    )
+          setStreamingContent('')
+          setStreamingAssistantId(null)
+          setIsStreaming(false)
+          setAbortController(null)
+          activeAbortControllerRef.current = null
+          isSendingRef.current = false
+        },
+        controller.signal
+      )
     } catch (err) {
       console.error('Failed to start streaming:', err)
       setInputText(text)
       setIsStreaming(false)
       setAbortController(null)
+      activeAbortControllerRef.current = null
+      isSendingRef.current = false
       setStreamingContent('')
       setStreamingAssistantId(null)
-      setMessages(prev => prev.filter(m => m.id !== userMsg.id && m.id !== assistantMsg.id))
+      setMessages(prev => prev.filter(m => m.id !== userMsg!.id && m.id !== assistantMsg!.id))
       controller.abort()
     }
   }
 
   function handleStop() {
-    abortController?.abort()
+    activeAbortControllerRef.current?.abort()
+    setAbortController(null)
   }
 
   function handleModelChange(model: string) {

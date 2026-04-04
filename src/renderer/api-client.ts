@@ -9,7 +9,7 @@ let baseUrl: string | null = null
 async function getBaseUrl(): Promise<string> {
   if (!baseUrl) {
     const port = await window.electronAPI.getBackendPort()
-    baseUrl = `http://localhost:${port}`
+    baseUrl = `http://127.0.0.1:${port}`
     console.log('[api] backend at', baseUrl)
   }
   return baseUrl
@@ -189,6 +189,12 @@ export const api = {
       body: JSON.stringify({ assistantMessageId }),
       signal
     })
+
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({ error: res.statusText }))
+      onError(errorData.error || `Server error: ${res.status}`)
+      return
+    }
 
     if (!res.body) {
       console.error('[api] streamChat: no response body')

@@ -110,7 +110,13 @@ export function createChatRouter(client: LmStudioClient, db: Db, modelRouter: Mo
         model,
         messages,
         onToken: (token) => {
-          sendEvent({ type: 'token', content: token })
+          try {
+            sendEvent({ type: 'token', content: token })
+          } catch (err) {
+            // If writing to the response fails (e.g. client disconnected), 
+            // the chatStream will eventually throw or abort, but we should handle it here
+            console.error('[chat] Failed to send token event:', err)
+          }
         },
         signal: abortController.signal,
       })

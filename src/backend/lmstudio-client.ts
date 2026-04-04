@@ -59,12 +59,12 @@ export function createLmStudioClient(baseUrl: string): LmStudioClient {
 
     async summarize(messages, model, signal) {
       const prompt = [
-        ...messages,
         {
           role: 'system',
           content:
-            'Provide a concise summary of the conversation above, preserving all key information and decisions.'
-        }
+            'Provide a concise summary of the conversation below, preserving all key information and decisions.'
+        },
+        ...messages
       ]
       const payload = { model, messages: prompt, stream: false }
       console.log('[lmstudio] POST /v1/chat/completions (summarize) model=%s messages=%d', model, prompt.length)
@@ -91,7 +91,7 @@ export function createLmStudioClient(baseUrl: string): LmStudioClient {
     },
 
     async chatStream({ model, messages, onToken, signal }) {
-      const payload = { model, messages, stream: true }
+      const payload = { model, messages: messages.map(m => ({ role: m.role, content: m.content })), stream: true }
       console.log('[lmstudio] POST /v1/chat/completions (stream) model=%s messages=%d', model, messages.length)
       console.log('[lmstudio] chat payload:', JSON.stringify(payload, null, 2))
 
@@ -118,15 +118,19 @@ export function createLmStudioClient(baseUrl: string): LmStudioClient {
       const decoder = new TextDecoder()
       let usage: { prompt_tokens: number; completion_tokens: number } | undefined
       let tokenCount = 0
+      let buffer = ''
 
       try {
         while (true) {
           const { done, value } = await reader.read()
           if (done) break
 
-          const chunk = decoder.decode(value, { stream: true })
-          for (const line of chunk.split('\n')) {
-            const trimmed = line.replace(/^data: /, '').trim()
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split('\n')
+          buffer = lines.pop() || ''
+
+          for (const line of lines) {
+            const trimmed = line.replace(/^data:\s*/, '').trim()
             if (!trimmed || trimmed === '[DONE]') continue
             try {
               const parsed = JSON.parse(trimmed)
@@ -142,7 +146,7 @@ export function createLmStudioClient(baseUrl: string): LmStudioClient {
           }
         }
       } finally {
-        reader.cancel()
+        reader.releaseLock()
       }
 
       console.log('[lmstudio] chatStream complete tokens=%d usage=%j', tokenCount, usage)

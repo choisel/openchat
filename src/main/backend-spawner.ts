@@ -15,7 +15,7 @@ export class BackendSpawner {
 
   constructor(options: SpawnerOptions) {
     this.options = {
-      lmStudioUrl: 'http://localhost:1234',
+      lmStudioUrl: 'http://127.0.0.1:1234',
       timeoutMs: 10_000,
       ...options
     }
