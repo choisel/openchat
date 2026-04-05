@@ -297,7 +297,7 @@ export const api = {
     return res.json()
   },
 
-  async getSettings(): Promise<Record<string, string | null>> {
+  async getSettings(): Promise<Record<string, string>> {
     const base = await getBaseUrl()
     const res = await fetch(`${base}/api/settings`)
     if (!res.ok) throw new Error(`Failed to load settings: ${res.status}`)
@@ -307,7 +307,7 @@ export const api = {
   async setSetting(key: string, value: string): Promise<void> {
     const base = await getBaseUrl()
     const res = await fetch(`${base}/api/settings/${key}`, {
-      method: 'PUT',
+      method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ value })
     })
