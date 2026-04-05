@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { FileBlock } from './FileBlock'
+import { ShellBlock } from './ShellBlock'
+import { AppleScriptBlock } from './AppleScriptBlock'
 
 interface Props {
   role: 'user' | 'assistant'
@@ -9,6 +11,41 @@ interface Props {
   modelName?: string
   isStreaming?: boolean
   onFork?: () => void
+}
+
+type Segment =
+  | { kind: 'text'; content: string }
+  | { kind: 'shell'; command: string }
+  | { kind: 'applescript'; script: string }
+  | { kind: 'shortcuts'; script: string }
+
+const BLOCK_REGEX = /```(shell|applescript|shortcuts)([\s\S]*?)```/g
+
+function parseAssistantContent(content: string): Segment[] {
+  const segments: Segment[] = []
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+
+  BLOCK_REGEX.lastIndex = 0
+  while ((match = BLOCK_REGEX.exec(content)) !== null) {
+    if (match.index > lastIndex) {
+      segments.push({ kind: 'text', content: content.slice(lastIndex, match.index) })
+    }
+    const tag = match[1] as 'shell' | 'applescript' | 'shortcuts'
+    const body = match[2].trim()
+    if (tag === 'shell') {
+      segments.push({ kind: 'shell', command: body })
+    } else if (tag === 'applescript') {
+      segments.push({ kind: 'applescript', script: body })
+    } else {
+      segments.push({ kind: 'shortcuts', script: body })
+    }
+    lastIndex = BLOCK_REGEX.lastIndex
+  }
+  if (lastIndex < content.length) {
+    segments.push({ kind: 'text', content: content.slice(lastIndex) })
+  }
+  return segments
 }
 
 function parseContentBlocks(content: string): Array<
@@ -63,7 +100,12 @@ export function MessageBubble({ role, content, tokens, exact_tokens, modelName, 
           </span>
         ) : (
           <span style={styles.content}>
-            {content}
+            {parseAssistantContent(content).map((segment, i) => {
+              if (segment.kind === 'text') return <span key={i} style={{ whiteSpace: 'pre-wrap' }}>{segment.content}</span>
+              if (segment.kind === 'shell') return <ShellBlock key={i} command={segment.command} />
+              if (segment.kind === 'applescript') return <AppleScriptBlock key={i} script={segment.script} />
+              if (segment.kind === 'shortcuts') return <AppleScriptBlock key={i} script={segment.script} />
+            })}
             {isStreaming && <span className="streaming-cursor">▋</span>}
           </span>
         )}
