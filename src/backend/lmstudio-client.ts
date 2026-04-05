@@ -25,7 +25,7 @@ export interface LmStudioClient {
     model: string
     messages: Array<{ role: string; content: string | MessageContentPart[] }>
     onToken: (token: string) => void
-    onToolCall?: (name: string, args: string) => void
+    onToolCall?: (name: string, args: string) => Promise<void> | void
     tools?: ToolDefinition[]
     signal?: AbortSignal
   }) => Promise<{ usage?: { prompt_tokens: number; completion_tokens: number } }>
@@ -171,7 +171,7 @@ export function createLmStudioClient(baseUrl: string): LmStudioClient {
               }
               const finishReason = parsed.choices?.[0]?.finish_reason
               if (finishReason === 'tool_calls' && currentToolCallName && onToolCall) {
-                onToolCall(currentToolCallName, currentToolCallArgs)
+                await onToolCall(currentToolCallName, currentToolCallArgs)
                 currentToolCallName = ''
                 currentToolCallArgs = ''
               }

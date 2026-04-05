@@ -126,6 +126,7 @@ export function createChatRouter(client: LmStudioClient, db: Db, modelRouter: Mo
     }
 
     try {
+      let toolCallUsage: { prompt_tokens: number; completion_tokens: number } | undefined
       const result = await client.chatStream({
         model,
         messages,
@@ -167,7 +168,7 @@ export function createChatRouter(client: LmStudioClient, db: Db, modelRouter: Mo
             ]
 
             // Second streaming call — tokens go directly to sendEvent
-            await client.chatStream({
+            const toolCallResult = await client.chatStream({
               model,
               messages: messagesWithResult as any,
               onToken: (token) => {
@@ -175,6 +176,7 @@ export function createChatRouter(client: LmStudioClient, db: Db, modelRouter: Mo
               },
               signal: abortController.signal
             })
+            toolCallUsage = toolCallResult.usage
           } catch (err) {
             if (!(err instanceof SearchUnavailableError)) {
               console.error('[chat] tool call error:', err)
@@ -185,11 +187,12 @@ export function createChatRouter(client: LmStudioClient, db: Db, modelRouter: Mo
         signal: abortController.signal,
       })
 
-      sendEvent({ type: 'done', usage: result.usage ?? null })
+      const finalUsage = toolCallUsage ?? result.usage
+      sendEvent({ type: 'done', usage: finalUsage ?? null })
 
       // Update assistant message token count if we have usage and an ID
-      if (result.usage && assistantMessageId != null) {
-        db.updateMessageTokens(assistantMessageId, result.usage.completion_tokens)
+      if (finalUsage && assistantMessageId != null) {
+        db.updateMessageTokens(assistantMessageId, finalUsage.completion_tokens)
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unknown error'
