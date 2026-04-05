@@ -94,21 +94,21 @@ Tasks:
 ---
 
 ## Plan 6 — System Integrations
-Status: ⬜ todo
-Branch: not started
-Summary: Shell execution from LLM output, AppleScript execution, permissions allowlist UI, settings persistence.
+Status: ✅ done
+Branch: feat/plan-6-system-integrations (merged: 2ed4cab)
+Summary: Permissions DB layer (shell/applescript allowlists), settings API (permissions CRUD + GET/PATCH), SystemExecutor service (spawn + SIGTERM/SIGKILL + AsyncIterable), system routes (POST /api/system/shell + applescript with minimatch allowlist, 202 confirmation gate, SSE streaming), renderer API client extensions (runShell, runAppleScript, permissions helpers), ConfirmationModal, ShellBlock, AppleScriptBlock components with streaming output, LLM output parser in MessageBubble (fenced shell/applescript/shortcuts blocks → interactive components), Permissions UI in SettingsModal.
 
 Tasks:
-- [ ] T-1 Permissions persistence (DB layer)
-- [ ] T-2 Settings API for permissions
-- [ ] T-3 SystemExecutor service
-- [ ] T-4 System execution routes + allowlist enforcement
-- [ ] T-5 Renderer API client extensions
-- [ ] T-6 ConfirmationModal component
-- [ ] T-7 ShellBlock component
-- [ ] T-8 AppleScriptBlock component
-- [ ] T-9 LLM output parser and ChatArea integration
-- [ ] T-10 Settings panel: Permissions UI
+- [x] T-1 Permissions persistence (DB layer)
+- [x] T-2 Settings API for permissions
+- [x] T-3 SystemExecutor service
+- [x] T-4 System execution routes + allowlist enforcement
+- [x] T-5 Renderer API client extensions
+- [x] T-6 ConfirmationModal component
+- [x] T-7 ShellBlock component
+- [x] T-8 AppleScriptBlock component
+- [x] T-9 LLM output parser and ChatArea integration
+- [x] T-10 Settings panel: Permissions UI
 
 ---
 
