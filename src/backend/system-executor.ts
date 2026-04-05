@@ -10,8 +10,11 @@ function killProcessGroup(pid: number | undefined, sig: NodeJS.Signals) {
   try {
     // Negative PID targets the entire process group
     process.kill(-pid, sig)
-  } catch {
-    // Process may already be gone
+  } catch (err: any) {
+    if (err.code !== 'ESRCH') {
+      // Only ESRCH is expected (process already gone); anything else is unexpected
+      console.error(`[system-executor] kill -${sig} failed:`, err)
+    }
   }
 }
 
@@ -86,12 +89,22 @@ function runProcess(
     })
 
     // Consume events until done
-    while (true) {
-      await waitForEvent()
-      while (queue.length > 0) {
-        yield queue.shift()!
+    try {
+      while (true) {
+        await waitForEvent()
+        while (queue.length > 0) {
+          yield queue.shift()!
+        }
+        if (done && queue.length === 0) break
       }
-      if (done && queue.length === 0) break
+    } finally {
+      // cleanup if consumer exits early
+      clearTimeout(timeoutHandle)
+      if (killTimer !== null) clearTimeout(killTimer)
+      signal.removeEventListener('abort', sendTerm)
+      if (!proc.killed && proc.exitCode === null) {
+        sendTerm()
+      }
     }
   }
 
