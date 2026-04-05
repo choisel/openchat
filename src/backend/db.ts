@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3'
+import os from 'os'
 
 export interface Conversation {
   id: number
@@ -22,6 +23,13 @@ export interface Message {
   created_at: string
 }
 
+export interface Permission {
+  id: number
+  type: 'shell' | 'applescript'
+  pattern: string
+  created_at: string
+}
+
 export interface Db {
   close: () => void
   prepare: InstanceType<typeof Database>['prepare']
@@ -39,6 +47,9 @@ export interface Db {
   forkConversation: (id: number, fromMessageId: number) => Conversation
   getSetting: (key: string) => string | undefined
   setSetting: (key: string, value: string) => void
+  listPermissions: (type: 'shell' | 'applescript') => Permission[]
+  addPermission: (type: 'shell' | 'applescript', pattern: string) => void
+  removePermission: (id: number) => void
 }
 
 export function createDb(dbPath: string): Db {
@@ -83,7 +94,26 @@ export function createDb(dbPath: string): Db {
   `)
   addColumnIfNotExists('ALTER TABLE conversations ADD COLUMN auto_search INTEGER DEFAULT 0')
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS permissions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      type TEXT NOT NULL CHECK(type IN ('shell', 'applescript')),
+      pattern TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now'))
+    );
+  `)
+
   db.pragma('foreign_keys = ON')
+
+  // Default settings — only set if not already present
+  const setDefaultSetting = (key: string, value: string) => {
+    db.prepare(
+      'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING'
+    ).run(key, value)
+  }
+  setDefaultSetting('shell_working_dir', os.homedir())
+  setDefaultSetting('shell_timeout_ms', '30000')
+  setDefaultSetting('applescript_timeout_ms', '10000')
 
   return {
     close: () => db.close(),
@@ -235,6 +265,22 @@ export function createDb(dbPath: string): Db {
 
     setSetting(key, value) {
       db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, value)
+    },
+
+    listPermissions(type) {
+      return db.prepare(
+        'SELECT id, type, pattern, created_at FROM permissions WHERE type = ? ORDER BY id ASC'
+      ).all(type) as Permission[]
+    },
+
+    addPermission(type, pattern) {
+      db.prepare(
+        'INSERT INTO permissions (type, pattern) VALUES (?, ?)'
+      ).run(type, pattern)
+    },
+
+    removePermission(id) {
+      db.prepare('DELETE FROM permissions WHERE id = ?').run(id)
     },
   }
 }
