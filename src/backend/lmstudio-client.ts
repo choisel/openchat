@@ -5,13 +5,28 @@ export interface LmModel {
   context_length?: number
 }
 
+export type MessageContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } }
+
+export interface ToolDefinition {
+  type: 'function'
+  function: {
+    name: string
+    description: string
+    parameters: Record<string, unknown>
+  }
+}
+
 export interface LmStudioClient {
   listModels: () => Promise<LmModel[]>
   checkConnection: () => Promise<{ connected: boolean }>
   chatStream: (args: {
     model: string
-    messages: { role: string; content: string }[]
+    messages: Array<{ role: string; content: string | MessageContentPart[] }>
     onToken: (token: string) => void
+    onToolCall?: (name: string, args: string) => Promise<void> | void
+    tools?: ToolDefinition[]
     signal?: AbortSignal
   }) => Promise<{ usage?: { prompt_tokens: number; completion_tokens: number } }>
   summarize: (
@@ -90,8 +105,13 @@ export function createLmStudioClient(baseUrl: string): LmStudioClient {
       return data.choices[0].message.content
     },
 
-    async chatStream({ model, messages, onToken, signal }) {
-      const payload = { model, messages: messages.map(m => ({ role: m.role, content: m.content })), stream: true }
+    async chatStream({ model, messages, onToken, onToolCall, tools, signal }) {
+      const payload: Record<string, unknown> = {
+        model,
+        messages: messages.map(m => ({ role: m.role, content: m.content })),
+        stream: true
+      }
+      if (tools && tools.length > 0) payload.tools = tools
       console.log('[lmstudio] POST /v1/chat/completions (stream) model=%s messages=%d', model, messages.length)
       console.log('[lmstudio] chat payload:', JSON.stringify(payload, null, 2))
 
@@ -119,6 +139,8 @@ export function createLmStudioClient(baseUrl: string): LmStudioClient {
       let usage: { prompt_tokens: number; completion_tokens: number } | undefined
       let tokenCount = 0
       let buffer = ''
+      let currentToolCallName = ''
+      let currentToolCallArgs = ''
 
       try {
         while (true) {
@@ -140,6 +162,19 @@ export function createLmStudioClient(baseUrl: string): LmStudioClient {
                 onToken(token)
               }
               if (parsed.usage) usage = parsed.usage
+              const toolCallDelta = parsed.choices?.[0]?.delta?.tool_calls?.[0]
+              if (toolCallDelta?.function?.name) {
+                currentToolCallName = toolCallDelta.function.name
+              }
+              if (toolCallDelta?.function?.arguments) {
+                currentToolCallArgs += toolCallDelta.function.arguments
+              }
+              const finishReason = parsed.choices?.[0]?.finish_reason
+              if (finishReason === 'tool_calls' && currentToolCallName && onToolCall) {
+                await onToolCall(currentToolCallName, currentToolCallArgs)
+                currentToolCallName = ''
+                currentToolCallArgs = ''
+              }
             } catch {
               // malformed SSE line — skip
             }

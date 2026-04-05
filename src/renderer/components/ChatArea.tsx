@@ -4,6 +4,10 @@ import { estimateTokens } from '../lib/tokens'
 import { TopBar } from './TopBar'
 import { MessageBubble } from './MessageBubble'
 import { CompactToast } from './CompactToast'
+import { AttachmentChip } from './AttachmentChip'
+import type { AttachmentData } from '../api-client'
+import { SourcesBlock } from './SourcesBlock'
+import type { SearchResult } from './SourcesBlock'
 
 interface ChatAreaProps {
   conversation: Conversation | null
@@ -32,6 +36,17 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
   const activeAbortControllerRef = useRef<AbortController | null>(null)
   // Prevents re-arming auto-compact within the same stream cycle after a cancel
   const autoCompactArmedThisStream = useRef(false)
+
+  const [attachments, setAttachments] = useState<AttachmentData[]>([])
+  const [isDragging, setIsDragging] = useState(false)
+
+  const [webSearchActive, setWebSearchActive] = useState(false)
+  const [searchResultsForMessageId, setSearchResultsForMessageId] = useState<Map<number, SearchResult[]>>(new Map())
+  const [searchWarning, setSearchWarning] = useState<string | null>(null)
+
+  function isVisionModel(model: string): boolean {
+    return /vision|llava|bakllava|moondream/i.test(model)
+  }
 
   async function runCompaction(convId: number) {
     setCompactState('running')
@@ -68,6 +83,11 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
     setCompactState('idle')
     setAutoCompactToastVisible(false)
     autoCompactArmedThisStream.current = false
+    setAttachments([])
+    setIsDragging(false)
+    setSearchResultsForMessageId(new Map())
+    setWebSearchActive(false)
+    setSearchWarning(null)
     isSendingRef.current = false
     activeAbortControllerRef.current?.abort()
     activeAbortControllerRef.current = null
@@ -112,6 +132,22 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
   async function handleSend() {
     if (!inputText.trim() || isStreaming || isSendingRef.current || !conversation) return
 
+    // Web search pre-send
+    let pendingSearchResults: SearchResult[] | null = null
+    setSearchWarning(null)
+
+    if (webSearchActive && inputText.trim()) {
+      try {
+        pendingSearchResults = await api.search(inputText.trim())
+      } catch (err: any) {
+        if (err.message?.includes('not configured')) {
+          setSearchWarning('Web search not configured — add API keys in Settings')
+        } else {
+          setSearchWarning('Web search failed — sending without search results')
+        }
+      }
+    }
+
     isSendingRef.current = true
     // Dismiss any pending auto-compact toast when a new message is sent
     setAutoCompactToastVisible(false)
@@ -121,12 +157,28 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
     const text = inputText
     setInputText('')
 
-    const estimatedUserTokens = estimateTokens(text)
+    // Build enriched text with file content injected
+    let enrichedText = text
+
+    for (const att of attachments) {
+      if (att.type === 'text') {
+        enrichedText = `\`\`\`${att.language}\n// ${att.filename}\n${att.content}\n\`\`\`\n\n${enrichedText}`
+      } else if (att.type === 'pdf') {
+        enrichedText = `[PDF: ${att.filename}]\n${att.content}\n\n${enrichedText}`
+      } else if (att.type === 'pdf-unreadable') {
+        enrichedText = `[PDF: ${att.filename} — could not extract text]\n\n${enrichedText}`
+      }
+      // images: handled as dataUrl in attachment chips; skipped in text for now
+    }
+
+    setAttachments([])
+
+    const estimatedUserTokens = estimateTokens(enrichedText)
 
     let userMsg, assistantMsg
     try {
       // Create user message on backend
-      userMsg = await api.sendMessage(conversation.id, 'user', text, estimatedUserTokens)
+      userMsg = await api.sendMessage(conversation.id, 'user', enrichedText, estimatedUserTokens)
 
       // Pre-create empty assistant message
       assistantMsg = await api.sendMessage(conversation.id, 'assistant', '', 0)
@@ -135,6 +187,14 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
       setInputText(text)
       isSendingRef.current = false
       return
+    }
+
+    if (pendingSearchResults && pendingSearchResults.length > 0) {
+      setSearchResultsForMessageId(prev => {
+        const next = new Map(prev)
+        next.set(userMsg.id, pendingSearchResults!)
+        return next
+      })
     }
 
     setMessages(prev => [...prev, userMsg, assistantMsg])
@@ -229,7 +289,15 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
           activeAbortControllerRef.current = null
           isSendingRef.current = false
         },
-        controller.signal
+        controller.signal,
+        (results) => {
+          // Auto-search sources — associate with the assistant message
+          setSearchResultsForMessageId(prev => {
+            const next = new Map(prev)
+            next.set(assistantMsg!.id, results)
+            return next
+          })
+        }
       )
     } catch (err) {
       console.error('Failed to start streaming:', err)
@@ -291,6 +359,35 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
     if (conversation) runCompaction(conversation.id)
   }
 
+  function handleDragEnter(e: React.DragEvent) {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  function handleDragLeave(e: React.DragEvent) {
+    e.preventDefault()
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setIsDragging(false)
+    }
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault()
+  }
+
+  async function handleDrop(e: React.DragEvent) {
+    e.preventDefault()
+    setIsDragging(false)
+    const files = Array.from(e.dataTransfer.files)
+    if (files.length === 0) return
+    try {
+      const results = await api.processFiles(files)
+      setAttachments(prev => [...prev, ...results])
+    } catch (err) {
+      console.error('File processing failed:', err)
+    }
+  }
+
   if (!conversation) {
     return (
       <div style={styles.empty}>
@@ -300,7 +397,18 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
   }
 
   return (
-    <div style={styles.container}>
+    <div
+      style={{ ...styles.container, position: 'relative' }}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
+      {isDragging && (
+        <div style={styles.dropOverlay}>
+          <span style={styles.dropLabel}>Drop files here</span>
+        </div>
+      )}
       <TopBar
         conversationId={conversation.id}
         conversationName={conversation.name}
@@ -324,16 +432,19 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
           const displayTokens = isStreamingMsg
             ? Math.ceil(streamingContent.length / 4)
             : msg.tokens
+          const sources = searchResultsForMessageId.get(msg.id)
           return (
-            <MessageBubble
-              key={msg.id}
-              role={msg.role}
-              content={displayContent}
-              tokens={displayTokens}
-              exact_tokens={isStreamingMsg ? undefined : msg.exact_tokens}
-              isStreaming={isStreamingMsg}
-              onFork={() => handleFork(msg.id)}
-            />
+            <div key={msg.id}>
+              {sources && <SourcesBlock results={sources} />}
+              <MessageBubble
+                role={msg.role}
+                content={displayContent}
+                tokens={displayTokens}
+                exact_tokens={isStreamingMsg ? undefined : msg.exact_tokens}
+                isStreaming={isStreamingMsg}
+                onFork={() => handleFork(msg.id)}
+              />
+            </div>
           )
         })}
         <div ref={messagesEndRef} />
@@ -344,27 +455,56 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
           />
         )}
       </div>
+      {attachments.length > 0 && (
+        <div style={styles.attachmentRow}>
+          {attachments.map((att, i) => (
+            <AttachmentChip
+              key={i}
+              attachment={att}
+              onRemove={() => setAttachments(prev => prev.filter((_, j) => j !== i))}
+              isVisionWarning={att.type === 'image' && !isVisionModel(conversation.model)}
+            />
+          ))}
+        </div>
+      )}
       <div style={styles.inputArea}>
-        <textarea
-          value={inputText}
-          onChange={e => setInputText(e.target.value)}
-          onKeyDown={e => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault()
-              handleSend()
-            }
-          }}
-          placeholder="Message..."
-          disabled={isStreaming}
-          style={styles.textarea}
-        />
-        <button
-          onClick={handleSend}
-          disabled={isStreaming || !inputText.trim()}
-          style={styles.sendBtn}
-        >
-          ↑
-        </button>
+        <div style={styles.inputToolbar}>
+          <button
+            onClick={() => setWebSearchActive(a => !a)}
+            title={webSearchActive ? 'Disable web search' : 'Enable web search for next message'}
+            style={{
+              ...styles.toolbarBtn,
+              ...(webSearchActive ? styles.toolbarBtnActive : {})
+            }}
+          >
+            🌐
+          </button>
+        </div>
+        {searchWarning && (
+          <div style={styles.searchWarning}>{searchWarning}</div>
+        )}
+        <div style={styles.inputRow}>
+          <textarea
+            value={inputText}
+            onChange={e => setInputText(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                handleSend()
+              }
+            }}
+            placeholder="Message..."
+            disabled={isStreaming}
+            style={styles.textarea}
+          />
+          <button
+            onClick={handleSend}
+            disabled={isStreaming || !inputText.trim()}
+            style={styles.sendBtn}
+          >
+            ↑
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -398,6 +538,10 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '16px',
     borderTop: '1px solid #3a3a3c',
     display: 'flex',
+    flexDirection: 'column',
+  },
+  inputRow: {
+    display: 'flex',
     gap: 8,
     alignItems: 'flex-end',
   },
@@ -424,5 +568,32 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     fontSize: 16,
     flexShrink: 0,
+  },
+  dropOverlay: {
+    position: 'absolute', inset: 0, zIndex: 50,
+    background: 'rgba(10, 132, 255, 0.12)',
+    border: '2px dashed #0a84ff',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    pointerEvents: 'none',
+  },
+  dropLabel: { color: '#0a84ff', fontSize: 18, fontWeight: 600 },
+  attachmentRow: {
+    display: 'flex', flexWrap: 'wrap', gap: 6,
+    padding: '0 16px 8px',
+  },
+  inputToolbar: {
+    display: 'flex', gap: 4, marginBottom: 6,
+  },
+  toolbarBtn: {
+    background: 'none', border: '1px solid #3a3a3c',
+    borderRadius: 6, color: '#8e8e93', cursor: 'pointer',
+    fontSize: 14, padding: '3px 8px',
+  },
+  toolbarBtnActive: {
+    background: '#0a84ff22', border: '1px solid #0a84ff',
+    color: '#0a84ff',
+  },
+  searchWarning: {
+    color: '#ff9f0a', fontSize: 11, marginBottom: 4,
   },
 }

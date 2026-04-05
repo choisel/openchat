@@ -5,6 +5,9 @@ import type { LmStudioClient } from './lmstudio-client'
 import { ModelRouter } from './model-router'
 import { createConversationsRouter } from './routes/conversations'
 import { createLmStudioRouter, createChatRouter } from './routes/lmstudio'
+import { createFilesRouter } from './routes/files'
+import { createSearchRouter } from './routes/search'
+import { createSettingsRouter } from './routes/settings'
 
 interface AppOptions {
   db: Db
@@ -31,6 +34,9 @@ export function createApp({ db, lmStudioUrl, lmClient }: AppOptions) {
   app.use('/api/conversations', createConversationsRouter(db, resolvedClient))
   app.use('/api/lmstudio', createLmStudioRouter(resolvedClient, db, modelRouter))
   app.use('/api/chat', createChatRouter(resolvedClient, db, modelRouter))
+  app.use('/api/files', createFilesRouter())
+  app.use('/api/search', createSearchRouter(db))
+  app.use('/api/settings', createSettingsRouter(db))
 
   return { app, lmClient: resolvedClient }
 }

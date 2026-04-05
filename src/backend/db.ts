@@ -7,6 +7,7 @@ export interface Conversation {
   context_window: number
   auto_compact_threshold: number
   auto_compact_enabled: number
+  auto_search: number
   created_at: string
   updated_at: string
 }
@@ -27,7 +28,7 @@ export interface Db {
   createConversation: (args: { name: string; model: string }) => number
   getConversation: (id: number) => Conversation | undefined
   listConversations: () => Conversation[]
-  updateConversation: (id: number, fields: Partial<{ name: string; model: string; context_window: number; auto_compact_threshold: number; auto_compact_enabled: number }>) => void
+  updateConversation: (id: number, fields: Partial<{ name: string; model: string; context_window: number; auto_compact_threshold: number; auto_compact_enabled: number; auto_search: number }>) => void
   deleteConversation: (id: number) => void
   addMessage: (args: { conversationId: number; role: 'user' | 'assistant'; content: string; tokens: number }) => number
   bulkAddMessages: (conversationId: number, messages: Array<{ role: 'user' | 'assistant'; content: string; tokens: number }>) => void
@@ -36,6 +37,8 @@ export interface Db {
   addCompactedMarker: (conversationId: number, summaryMessageCount: number) => void
   compactConversation: (id: number, summary: string, keptMessages: Message[], summarizedCount: number) => void
   forkConversation: (id: number, fromMessageId: number) => Conversation
+  getSetting: (key: string) => string | undefined
+  setSetting: (key: string, value: string) => void
 }
 
 export function createDb(dbPath: string): Db {
@@ -72,6 +75,14 @@ export function createDb(dbPath: string): Db {
   addColumnIfNotExists('ALTER TABLE conversations ADD COLUMN auto_compact_enabled INTEGER DEFAULT 1')
   addColumnIfNotExists('ALTER TABLE messages ADD COLUMN exact_tokens INTEGER')
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+  `)
+  addColumnIfNotExists('ALTER TABLE conversations ADD COLUMN auto_search INTEGER DEFAULT 0')
+
   db.pragma('foreign_keys = ON')
 
   return {
@@ -101,6 +112,7 @@ export function createDb(dbPath: string): Db {
       if (fields.context_window !== undefined) { setClauses.push('context_window = ?'); values.push(fields.context_window) }
       if (fields.auto_compact_threshold !== undefined) { setClauses.push('auto_compact_threshold = ?'); values.push(fields.auto_compact_threshold) }
       if (fields.auto_compact_enabled !== undefined) { setClauses.push('auto_compact_enabled = ?'); values.push(fields.auto_compact_enabled) }
+      if (fields.auto_search !== undefined) { setClauses.push('auto_search = ?'); values.push(fields.auto_search) }
       if (setClauses.length === 0) return
       setClauses.push("updated_at = strftime('%Y-%m-%dT%H:%M:%f', 'now')")
       values.push(id)
@@ -214,6 +226,15 @@ export function createDb(dbPath: string): Db {
       bulkInsert(messages)
 
       return db.prepare('SELECT * FROM conversations WHERE id = ?').get(newId) as Conversation
-    }
+    },
+
+    getSetting(key) {
+      const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key) as { value: string } | undefined
+      return row?.value
+    },
+
+    setSetting(key, value) {
+      db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, value)
+    },
   }
 }

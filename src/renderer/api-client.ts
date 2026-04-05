@@ -1,6 +1,9 @@
 declare global {
   interface Window {
-    electronAPI: { getBackendPort: () => Promise<number> }
+    electronAPI: {
+      getBackendPort: () => Promise<number>
+      openExternal: (url: string) => Promise<void>
+    }
   }
 }
 
@@ -28,6 +31,7 @@ export interface Conversation {
   model: string
   auto_compact_enabled: number
   auto_compact_threshold: number
+  auto_search: number
   created_at: string
   updated_at: string
 }
@@ -41,6 +45,12 @@ export interface Message {
   exact_tokens?: number | null
   created_at: string
 }
+
+export type AttachmentData =
+  | { type: 'text'; language: string; content: string; filename: string }
+  | { type: 'pdf'; content: string; filename: string }
+  | { type: 'pdf-unreadable'; filename: string }
+  | { type: 'image'; dataUrl: string; mimeType: string; filename: string }
 
 export const api = {
   async listConversations(): Promise<Conversation[]> {
@@ -117,7 +127,7 @@ export const api = {
     return res.json()
   },
 
-  async updateConversation(conversationId: number, fields: Partial<Pick<Conversation, 'name' | 'model' | 'auto_compact_enabled' | 'auto_compact_threshold'>>): Promise<Conversation> {
+  async updateConversation(conversationId: number, fields: Partial<Pick<Conversation, 'name' | 'model' | 'auto_compact_enabled' | 'auto_compact_threshold' | 'auto_search'>>): Promise<Conversation> {
     const base = await getBaseUrl()
     const res = await fetch(`${base}/api/conversations/${conversationId}`, {
       method: 'PATCH',
@@ -172,13 +182,54 @@ export const api = {
     return res.json()
   },
 
+  async getSettings(): Promise<Record<string, string | null>> {
+    const base = await getBaseUrl()
+    const res = await fetch(`${base}/api/settings`)
+    if (!res.ok) throw new Error(`Failed to load settings: ${res.status}`)
+    return res.json()
+  },
+
+  async setSetting(key: string, value: string): Promise<void> {
+    const base = await getBaseUrl()
+    const res = await fetch(`${base}/api/settings/${key}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ value })
+    })
+    if (!res.ok) throw new Error(`Failed to save setting: ${res.status}`)
+  },
+
+  async search(query: string): Promise<Array<{ title: string; url: string; snippet: string }>> {
+    const base = await getBaseUrl()
+    const res = await fetch(`${base}/api/search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query })
+    })
+    if (!res.ok) {
+      if (res.status === 503) throw new Error('Web search not configured')
+      throw new Error(`Search failed: ${res.status}`)
+    }
+    return res.json()
+  },
+
+  async processFiles(files: File[]): Promise<AttachmentData[]> {
+    const base = await getBaseUrl()
+    const form = new FormData()
+    for (const f of files) form.append('files', f)
+    const res = await fetch(`${base}/api/files/process`, { method: 'POST', body: form })
+    if (!res.ok) throw new Error(`File processing failed: ${res.status}`)
+    return res.json()
+  },
+
   async streamChat(
     conversationId: number,
     assistantMessageId: number,
     onToken: (token: string) => void,
     onDone: (usage?: { prompt_tokens: number; completion_tokens: number }) => void,
     onError: (message: string) => void,
-    signal: AbortSignal
+    signal: AbortSignal,
+    onSources?: (results: Array<{ title: string; url: string; snippet: string }>) => void
   ): Promise<void> {
     const base = await getBaseUrl()
     console.log('[api] streamChat conv=%d assistantMsgId=%d', conversationId, assistantMessageId)
@@ -231,6 +282,8 @@ export const api = {
                 } else if (event.type === 'error') {
                   console.error('[api] streamChat error from server:', event.message)
                   onError(event.message)
+                } else if (event.type === 'sources' && onSources) {
+                  onSources(event.results)
                 }
               } catch (e) {
                 console.error('[api] streamChat parse error:', jsonStr)
