@@ -14,10 +14,7 @@ interface OutputLine {
 }
 
 function getLabel(script: string): string {
-  const trimmed = script.trimStart()
-  return trimmed.startsWith('shortcuts run') || script.includes('shortcuts run')
-    ? 'Shortcut'
-    : 'AppleScript'
+  return script.trimStart().startsWith('shortcuts run') ? 'Shortcut' : 'AppleScript'
 }
 
 function extractAppName(script: string): string {
@@ -32,6 +29,11 @@ export function AppleScriptBlock({ script }: AppleScriptBlockProps) {
   const outputRef = useRef<HTMLDivElement>(null)
 
   const label = getLabel(script)
+
+  // Abort any in-flight request on unmount
+  useEffect(() => {
+    return () => { abortRef.current?.abort() }
+  }, [])
 
   // Auto-scroll to bottom when new output lines arrive
   useEffect(() => {
