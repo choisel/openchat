@@ -49,7 +49,7 @@ export interface Db {
   setSetting: (key: string, value: string) => void
   listPermissions: (type: 'shell' | 'applescript') => Permission[]
   addPermission: (type: 'shell' | 'applescript', pattern: string) => void
-  removePermission: (id: number) => void
+  removePermission: (id: number) => number
 }
 
 export function createDb(dbPath: string): Db {
@@ -280,7 +280,7 @@ export function createDb(dbPath: string): Db {
     },
 
     removePermission(id) {
-      db.prepare('DELETE FROM permissions WHERE id = ?').run(id)
+      return db.prepare('DELETE FROM permissions WHERE id = ?').run(id).changes
     },
   }
 }

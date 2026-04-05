@@ -20,36 +20,8 @@ export function createSettingsRouter(db: Db): Router {
     res.json(result)
   })
 
-  router.put('/:key', (req, res) => {
-    const { key } = req.params
-    if (!ALLOWED_KEYS.has(key)) {
-      res.status(400).json({ error: `Unknown setting key: ${key}` })
-      return
-    }
-    const { value } = req.body as { value?: string }
-    if (typeof value !== 'string') {
-      res.status(400).json({ error: 'value must be a string' })
-      return
-    }
-    db.setSetting(key, value)
-    res.json({ key, value })
-  })
-
-  router.patch('/:key', (req, res) => {
-    const { key } = req.params
-    if (!ALLOWED_KEYS.has(key)) {
-      res.status(400).json({ error: `Unknown setting key: ${key}` })
-      return
-    }
-    const { value } = req.body as { value?: string }
-    if (typeof value !== 'string') {
-      res.status(400).json({ error: 'value must be a string' })
-      return
-    }
-    db.setSetting(key, value)
-    res.json({ key, value })
-  })
-
+  // Static /permissions routes must be registered before /:key param routes
+  // to prevent route shadowing (same pattern as conversations.ts).
   router.get('/permissions', (req, res) => {
     const { type } = req.query as { type?: string }
     if (type !== 'shell' && type !== 'applescript') {
@@ -80,8 +52,27 @@ export function createSettingsRouter(db: Db): Router {
       res.status(400).json({ error: 'id must be a positive integer' })
       return
     }
-    db.removePermission(id)
+    const changes = db.removePermission(id)
+    if (changes === 0) {
+      res.status(404).json({ error: 'Permission not found' })
+      return
+    }
     res.status(204).send()
+  })
+
+  router.patch('/:key', (req, res) => {
+    const { key } = req.params
+    if (!ALLOWED_KEYS.has(key)) {
+      res.status(400).json({ error: `Unknown setting key: ${key}` })
+      return
+    }
+    const { value } = req.body as { value?: string }
+    if (typeof value !== 'string') {
+      res.status(400).json({ error: 'value must be a string' })
+      return
+    }
+    db.setSetting(key, value)
+    res.json({ key, value })
   })
 
   return router

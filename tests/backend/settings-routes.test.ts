@@ -128,6 +128,11 @@ describe('settings routes API', () => {
       expect(res.status).toBe(400)
     })
 
+    it('DELETE returns 404 for non-existent id', async () => {
+      const res = await request(app).delete('/api/settings/permissions/99999')
+      expect(res.status).toBe(404)
+    })
+
     it('shell and applescript permissions are isolated', async () => {
       await request(app)
         .post('/api/settings/permissions')
