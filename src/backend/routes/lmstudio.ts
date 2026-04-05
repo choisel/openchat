@@ -1,7 +1,23 @@
 import { Router } from 'express'
-import type { LmStudioClient, LmModel } from '../lmstudio-client'
+import type { LmStudioClient, LmModel, ToolDefinition } from '../lmstudio-client'
 import type { Db } from '../db'
 import type { ModelRouter } from '../model-router'
+import { createSearchClient, SearchUnavailableError } from '../search-client'
+
+const WEB_SEARCH_TOOL: ToolDefinition = {
+  type: 'function',
+  function: {
+    name: 'web_search',
+    description: 'Search the web for current information. Use when the user asks about recent events, facts, or anything that benefits from web results.',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'The search query' }
+      },
+      required: ['query']
+    }
+  }
+}
 
 // 30-second in-memory cache for the model list
 interface ModelCache {
@@ -87,6 +103,10 @@ export function createChatRouter(client: LmStudioClient, db: Db, modelRouter: Mo
       .map(m => ({ role: m.role, content: m.content }))
     console.log('[chat] messages to LM Studio:', messages.map(m => `${m.role}(${m.content.slice(0, 30)})`))
 
+    const autoSearch = conversation.auto_search === 1
+    const modelSupportsTools = /qwen|mistral|llama-3|gemma|deepseek|phi/i.test(model)
+    const useTools = autoSearch && modelSupportsTools
+
     // SSE headers
     res.setHeader('Content-Type', 'text/event-stream')
     res.setHeader('Cache-Control', 'no-cache')
@@ -113,9 +133,53 @@ export function createChatRouter(client: LmStudioClient, db: Db, modelRouter: Mo
           try {
             sendEvent({ type: 'token', content: token })
           } catch (err) {
-            // If writing to the response fails (e.g. client disconnected), 
+            // If writing to the response fails (e.g. client disconnected),
             // the chatStream will eventually throw or abort, but we should handle it here
             console.error('[chat] Failed to send token event:', err)
+          }
+        },
+        tools: useTools ? [WEB_SEARCH_TOOL] : undefined,
+        onToolCall: async (name, argsJson) => {
+          if (name !== 'web_search') return
+          try {
+            const { query } = JSON.parse(argsJson) as { query: string }
+            const braveKey = db.getSetting('brave_api_key')
+            const tavilyKey = db.getSetting('tavily_api_key')
+            const searcher = createSearchClient({ braveKey, tavilyKey })
+            const results = await searcher.search(query)
+
+            // Send sources event to renderer BEFORE second LLM call
+            sendEvent({ type: 'sources', results })
+
+            // Build second LLM call messages with tool result injected
+            const messagesWithResult = [
+              ...messages,
+              {
+                role: 'assistant',
+                content: '',
+                tool_calls: [{ id: 'call_1', type: 'function', function: { name, arguments: argsJson } }]
+              },
+              {
+                role: 'tool',
+                content: results.map((r, i) => `[${i+1}] ${r.title}\n${r.url}\n${r.snippet}`).join('\n\n'),
+                tool_call_id: 'call_1'
+              }
+            ]
+
+            // Second streaming call — tokens go directly to sendEvent
+            await client.chatStream({
+              model,
+              messages: messagesWithResult as any,
+              onToken: (token) => {
+                try { sendEvent({ type: 'token', content: token }) } catch {}
+              },
+              signal: abortController.signal
+            })
+          } catch (err) {
+            if (!(err instanceof SearchUnavailableError)) {
+              console.error('[chat] tool call error:', err)
+            }
+            // If search fails, the stream continues without results
           }
         },
         signal: abortController.signal,

@@ -289,7 +289,15 @@ export function ChatArea({ conversation, models, contextWindow, onConversationUp
           activeAbortControllerRef.current = null
           isSendingRef.current = false
         },
-        controller.signal
+        controller.signal,
+        (results) => {
+          // Auto-search sources — associate with the assistant message
+          setSearchResultsForMessageId(prev => {
+            const next = new Map(prev)
+            next.set(assistantMsg!.id, results)
+            return next
+          })
+        }
       )
     } catch (err) {
       console.error('Failed to start streaming:', err)

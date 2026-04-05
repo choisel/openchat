@@ -82,4 +82,65 @@ describe('LmStudioClient', () => {
     expect(payload.messages[0]).toEqual({ role: 'user', content: 'hi' })
     expect(Object.keys(payload.messages[0])).toHaveLength(2)
   })
+
+  it('emits onToolCall when finish_reason is tool_calls', async () => {
+    const toolCallChunk = JSON.stringify({
+      choices: [{
+        delta: {
+          tool_calls: [{
+            index: 0,
+            id: 'call_abc',
+            function: { name: 'web_search', arguments: '{"query":"test query"}' }
+          }]
+        },
+        finish_reason: 'tool_calls'
+      }]
+    })
+    const mockStream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(`data: ${toolCallChunk}\n`))
+        controller.enqueue(new TextEncoder().encode('data: [DONE]\n'))
+        controller.close()
+      }
+    })
+
+    mockFetch.mockResolvedValueOnce({ ok: true, body: mockStream })
+
+    const toolCalls: Array<{ name: string; args: string }> = []
+    await client.chatStream({
+      model: 'test',
+      messages: [{ role: 'user', content: 'search for something' }],
+      onToken: () => {},
+      onToolCall: (name, args) => toolCalls.push({ name, args })
+    })
+
+    expect(toolCalls).toHaveLength(1)
+    expect(toolCalls[0].name).toBe('web_search')
+    expect(toolCalls[0].args).toBe('{"query":"test query"}')
+  })
+
+  it('sends tools array in payload when provided', async () => {
+    const mockStream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"content":"hi"},"finish_reason":null}]}\n'))
+        controller.enqueue(new TextEncoder().encode('data: [DONE]\n'))
+        controller.close()
+      }
+    })
+    mockFetch.mockResolvedValueOnce({ ok: true, body: mockStream })
+
+    await client.chatStream({
+      model: 'test',
+      messages: [{ role: 'user', content: 'hello' }],
+      onToken: () => {},
+      tools: [{
+        type: 'function' as const,
+        function: { name: 'web_search', description: 'Search', parameters: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] } }
+      }]
+    })
+
+    const payload = JSON.parse(mockFetch.mock.calls[0][1].body)
+    expect(payload.tools).toBeDefined()
+    expect(payload.tools[0].function.name).toBe('web_search')
+  })
 })

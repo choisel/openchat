@@ -227,7 +227,8 @@ export const api = {
     onToken: (token: string) => void,
     onDone: (usage?: { prompt_tokens: number; completion_tokens: number }) => void,
     onError: (message: string) => void,
-    signal: AbortSignal
+    signal: AbortSignal,
+    onSources?: (results: Array<{ title: string; url: string; snippet: string }>) => void
   ): Promise<void> {
     const base = await getBaseUrl()
     console.log('[api] streamChat conv=%d assistantMsgId=%d', conversationId, assistantMessageId)
@@ -280,6 +281,8 @@ export const api = {
                 } else if (event.type === 'error') {
                   console.error('[api] streamChat error from server:', event.message)
                   onError(event.message)
+                } else if (event.type === 'sources' && onSources) {
+                  onSources(event.results)
                 }
               } catch (e) {
                 console.error('[api] streamChat parse error:', jsonStr)
