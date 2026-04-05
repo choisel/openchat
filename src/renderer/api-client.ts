@@ -31,6 +31,7 @@ export interface Conversation {
   model: string
   auto_compact_enabled: number
   auto_compact_threshold: number
+  auto_search: number
   created_at: string
   updated_at: string
 }
@@ -126,7 +127,7 @@ export const api = {
     return res.json()
   },
 
-  async updateConversation(conversationId: number, fields: Partial<Pick<Conversation, 'name' | 'model' | 'auto_compact_enabled' | 'auto_compact_threshold'>>): Promise<Conversation> {
+  async updateConversation(conversationId: number, fields: Partial<Pick<Conversation, 'name' | 'model' | 'auto_compact_enabled' | 'auto_compact_threshold' | 'auto_search'>>): Promise<Conversation> {
     const base = await getBaseUrl()
     const res = await fetch(`${base}/api/conversations/${conversationId}`, {
       method: 'PATCH',

@@ -19,8 +19,15 @@ export function createConversationsRouter(db: Db, lmClient: LmStudioClient): Rou
     const id = Number(req.params.id)
     const existing = db.getConversation(id)
     if (!existing) { res.status(404).json({ error: 'Not found' }); return }
-    const { name, model, context_window, auto_compact_threshold, auto_compact_enabled } = req.body
-    db.updateConversation(id, { name, model, context_window, auto_compact_threshold, auto_compact_enabled })
+    const { name, model, context_window, auto_compact_threshold, auto_compact_enabled, auto_search } = req.body
+    db.updateConversation(id, {
+      ...(name !== undefined && { name }),
+      ...(model !== undefined && { model }),
+      ...(context_window !== undefined && { context_window }),
+      ...(auto_compact_threshold !== undefined && { auto_compact_threshold }),
+      ...(auto_compact_enabled !== undefined && { auto_compact_enabled }),
+      ...(auto_search !== undefined && { auto_search })
+    })
     res.json(db.getConversation(id))
   })
 

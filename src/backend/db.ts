@@ -28,7 +28,7 @@ export interface Db {
   createConversation: (args: { name: string; model: string }) => number
   getConversation: (id: number) => Conversation | undefined
   listConversations: () => Conversation[]
-  updateConversation: (id: number, fields: Partial<{ name: string; model: string; context_window: number; auto_compact_threshold: number; auto_compact_enabled: number }>) => void
+  updateConversation: (id: number, fields: Partial<{ name: string; model: string; context_window: number; auto_compact_threshold: number; auto_compact_enabled: number; auto_search: number }>) => void
   deleteConversation: (id: number) => void
   addMessage: (args: { conversationId: number; role: 'user' | 'assistant'; content: string; tokens: number }) => number
   bulkAddMessages: (conversationId: number, messages: Array<{ role: 'user' | 'assistant'; content: string; tokens: number }>) => void
@@ -112,6 +112,7 @@ export function createDb(dbPath: string): Db {
       if (fields.context_window !== undefined) { setClauses.push('context_window = ?'); values.push(fields.context_window) }
       if (fields.auto_compact_threshold !== undefined) { setClauses.push('auto_compact_threshold = ?'); values.push(fields.auto_compact_threshold) }
       if (fields.auto_compact_enabled !== undefined) { setClauses.push('auto_compact_enabled = ?'); values.push(fields.auto_compact_enabled) }
+      if (fields.auto_search !== undefined) { setClauses.push('auto_search = ?'); values.push(fields.auto_search) }
       if (setClauses.length === 0) return
       setClauses.push("updated_at = strftime('%Y-%m-%dT%H:%M:%f', 'now')")
       values.push(id)
