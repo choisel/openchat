@@ -52,6 +52,121 @@ export type AttachmentData =
   | { type: 'pdf-unreadable'; filename: string }
   | { type: 'image'; dataUrl: string; mimeType: string; filename: string }
 
+export interface Permission {
+  id: number
+  type: string
+  pattern: string
+  created_at: string
+}
+
+export type ExecutorEvent = { type: 'stdout' | 'stderr' | 'exit'; data: string }
+
+async function* streamSse<T>(
+  url: string,
+  body: Record<string, unknown>,
+  signal?: AbortSignal
+): AsyncGenerator<T | { requiresConfirmation: true }> {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal
+  })
+
+  if (res.status === 202) {
+    yield { requiresConfirmation: true } as { requiresConfirmation: true }
+    return
+  }
+
+  if (!res.ok || !res.body) {
+    throw new Error(`Request failed: ${res.status}`)
+  }
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+
+      for (const line of lines) {
+        if (line.startsWith('data:')) {
+          const jsonStr = line.slice(5).trim()
+          if (jsonStr) {
+            yield JSON.parse(jsonStr) as T
+          }
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock()
+  }
+}
+
+export async function* runShell(
+  command: string,
+  confirmed?: boolean,
+  signal?: AbortSignal
+): AsyncGenerator<ExecutorEvent | { requiresConfirmation: true }> {
+  const base = await getBaseUrl()
+  yield* streamSse<ExecutorEvent>(`${base}/api/system/shell`, { command, confirmed }, signal)
+}
+
+export async function* runAppleScript(
+  script: string,
+  confirmed?: boolean,
+  signal?: AbortSignal
+): AsyncGenerator<ExecutorEvent | { requiresConfirmation: true }> {
+  const base = await getBaseUrl()
+  yield* streamSse<ExecutorEvent>(`${base}/api/system/applescript`, { script, confirmed }, signal)
+}
+
+export async function listPermissions(type: 'shell' | 'applescript'): Promise<Permission[]> {
+  const base = await getBaseUrl()
+  const res = await fetch(`${base}/api/settings/permissions?type=${type}`)
+  if (!res.ok) throw new Error(`Failed to list permissions: ${res.status}`)
+  return res.json()
+}
+
+export async function addPermission(type: 'shell' | 'applescript', pattern: string): Promise<void> {
+  const base = await getBaseUrl()
+  const res = await fetch(`${base}/api/settings/permissions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type, pattern })
+  })
+  if (!res.ok) throw new Error(`Failed to add permission: ${res.status}`)
+}
+
+export async function removePermission(id: number): Promise<void> {
+  const base = await getBaseUrl()
+  const res = await fetch(`${base}/api/settings/permissions/${id}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error(`Failed to remove permission: ${res.status}`)
+}
+
+export async function getSettings(): Promise<Record<string, string>> {
+  const base = await getBaseUrl()
+  const res = await fetch(`${base}/api/settings`)
+  if (!res.ok) throw new Error(`Failed to load settings: ${res.status}`)
+  return res.json()
+}
+
+export async function updateSetting(key: string, value: string): Promise<void> {
+  const base = await getBaseUrl()
+  const res = await fetch(`${base}/api/settings/${key}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ value })
+  })
+  if (!res.ok) throw new Error(`Failed to update setting: ${res.status}`)
+}
+
 export const api = {
   async listConversations(): Promise<Conversation[]> {
     const base = await getBaseUrl()
