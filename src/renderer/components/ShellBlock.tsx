@@ -20,6 +20,11 @@ export function ShellBlock({ command }: ShellBlockProps) {
   const abortRef = useRef<AbortController | null>(null)
   const outputRef = useRef<HTMLDivElement>(null)
 
+  // Abort in-flight generators on unmount
+  useEffect(() => {
+    return () => { abortRef.current?.abort() }
+  }, [])
+
   // Auto-scroll to bottom when new output lines arrive
   useEffect(() => {
     const el = outputRef.current
@@ -148,7 +153,7 @@ export function ShellBlock({ command }: ShellBlockProps) {
             {phase === 'running' ? (
               <button style={styles.stopBtn} onClick={handleStop}>Stop</button>
             ) : (
-              <button style={styles.runBtn} onClick={handleRun}>Run</button>
+              <button style={styles.runBtn} onClick={handleRun} disabled={phase === 'confirming'}>Run</button>
             )}
           </div>
         </div>
