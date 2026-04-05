@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 interface ConfirmationModalProps {
   type: 'shell' | 'applescript'
@@ -9,21 +9,39 @@ interface ConfirmationModalProps {
 
 export function ConfirmationModal({ type, command, onConfirm, onCancel }: ConfirmationModalProps) {
   const [addToAllowlist, setAddToAllowlist] = useState(true)
+  const modalRef = useRef<HTMLDivElement>(null)
+  const onCancelRef = useRef(onCancel)
+
+  useEffect(() => { onCancelRef.current = onCancel })
+
+  useEffect(() => {
+    modalRef.current?.focus()
+  }, [])
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') onCancel()
+      if (e.key === 'Escape') onCancelRef.current()
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [onCancel])
+  }, [])
 
+  const titleId = 'confirmation-modal-title'
   const title = type === 'shell' ? 'Run Shell Command' : 'Run AppleScript'
 
   return (
     <div style={styles.overlay} onClick={onCancel}>
-      <div style={styles.modal} onClick={e => e.stopPropagation()}>
-        <div style={styles.title}>{title}</div>
+      <div
+        ref={modalRef}
+        style={styles.modal}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        onClick={e => e.stopPropagation()}
+        onMouseDown={e => e.stopPropagation()}
+      >
+        <div id={titleId} style={styles.title}>{title}</div>
 
         <div style={styles.warning}>This will execute code on your system.</div>
 
